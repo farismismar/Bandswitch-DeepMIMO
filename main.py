@@ -29,9 +29,9 @@ seed = 0
 K_fold = 3
 learning_rate = 0.01
 max_users = 54481
-r_exploitation = 0.3
+r_exploitation = 0.2
 
-r_training = 0.8
+r_training = 0.7
 
 rrcEventB2Threshold = -90
 rrcEventA3Threshold = -70
@@ -138,7 +138,7 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     
     # Compute area under ROC curve
     roc_auc = roc_auc_score(y_test, y_score[:,1])
-    print('The ROC AUC for this UE #{0} is {1:.6f}'.format(i, roc_auc))
+    print('The ROC AUC for this UE is {1:.6f}'.format(roc_auc))
 
 def plot_roc(y_test, y_score, i=0):
     # Compute ROC curve and ROC area
@@ -187,7 +187,6 @@ def train_classifier(df):
 
     w = len(y_train[y_train == 0]) / (eps + len(y_train[y_train == 1]))
     
-    # TODO: add pos_weight later
     classifier = xgb.XGBClassifier(seed=seed, learning_rate=0.05, n_estimators=1000, max_depth=8, scale_pos_weight=w, silent=True)
     #classifier.get_params().keys()
     
@@ -208,9 +207,7 @@ def train_classifier(df):
     
     y_pred = clf.predict(X_test)
     y_score = clf.predict_proba(X_test)
-    
-#    try:
-        # Compute area under ROC curve
+
     roc_auc = roc_auc_score(y_test, y_score[:,1])    
     print('The Training ROC AUC for this UE is {:.6f}'.format(roc_auc))
 
@@ -242,7 +239,7 @@ def predict_handover(df, clf):
     return y_pred
 
 #create_dataset()
-#df_=pd.read_csv('dataset/dataset.csv')
+df_=pd.read_csv('dataset/dataset.csv')
 
 # Dataset column names
 # 0 user ID
@@ -254,8 +251,8 @@ def predict_handover(df, clf):
 # 773-1028 is imag H28
 # 1029 RSRP_28 dBm
 
-# TODO: Comment this line later.
 df = df_.iloc[:max_users,:]
+del df_
 
 # Give better names of the columns.
 df = df[['RSRP_35', 'RSRP_28', '513', '514']]#, '515']]
