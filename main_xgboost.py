@@ -33,8 +33,8 @@ r_exploitation = 0.3
 
 r_training = 0.8
 
-rate_threshold_35 = 3.9
-rate_threshold_28 = 2.0
+rate_threshold_35 = 4.3
+rate_threshold_28 = 2.9
 
 PTX_35 = 1 # in Watts for 3.5 GHz
 PTX_28 = 1 # in Watts for 28 GHz
@@ -49,7 +49,7 @@ B_28 = N_SC_28 * delta_f_28
 Nf = 7 # dB noise fig.
 
 k_B = 1.38e-23 # Boltzmann
-T = 290 # Kevlins
+T = 290 # Kelvins
 
 # 1) Read the data
 # Add a few lines to caputre the seed for reproducibility.
@@ -57,7 +57,6 @@ random.seed(seed)
 np.random.seed(seed)
 
 def create_dataset():
-    
     # Takes the two .csv files and merges them in a way that is useful for the Deep Learning.
     df35 = pd.read_csv('dataset/dataset_3.5_GHz.csv')
     df28 = pd.read_csv('dataset/dataset_28_GHz.csv')
@@ -77,11 +76,29 @@ def create_dataset():
     H28_imag = df28.iloc[:,257:512+1]
     H28_loc = df28.iloc[:,513:]
 
-    # 2.5) We decided to slash the 3.5 Matrix to a UPA of 8x8
-    H35_real = H35_real.iloc[:,:64]
-    H35_imag = H35_imag.iloc[:,:64]   
-   
-    # Before moving forward, check if the loc is equal
+    # 2.5) We decided to slash the 3.5 Matrix to a UPA of 8x8 in the y-z plane.
+    # Following the procedure
+    H35_real_8 = []
+    H35_imag_8 = []
+    
+    for user_id in np.arange(max_users):
+        H35_real_i = H35_real.iloc[user_id, 0:256]
+        H35_real_i = np.array(H35_real_i).reshape(32,8).T
+        H35_real_i = H35_real_i.flatten()
+        H35_real_i = H35_real_i[0:64]
+        H35_imag_i = H35_imag.iloc[user_id, 0:256]
+        H35_imag_i = np.array(H35_imag_i).reshape(32,8).T
+        H35_imag_i = H35_imag_i.flatten()
+        H35_imag_i = H35_imag_i[0:64]
+        
+        H35_real_8.append(H35_real_i)
+        H35_imag_8.append(H35_imag_i)
+        
+    # Convert to pandas df    
+    H35_real_8 = pd.DataFrame(H35_real_8)
+    H35_imag_8 = pd.DataFrame(H35_imag_8)
+    
+    # Before moving forward, check if the loc at time t is equal
     assert(np.all(df35.iloc[:,513:516] == df28.iloc[:,513:516]))
     
     # Reset the column names of the imaginary H
@@ -115,7 +132,12 @@ def create_dataset():
     
     noise_power_35 = 10 ** (Nf/10.) * noise_floor_35
     noise_power_28 = 10 ** (Nf/10.) * noise_floor_28
-      
+    
+    # Get rid of unwanted columns in 3.5
+    df35 = df35[['0', '513', '514', '515']]
+    df35.columns = ['t', 'lon', 'lat', 'height']
+    df35 = pd.concat([df35, H35_real_8, H35_imag_8], axis=1)
+    
     df35.loc[:,'Capacity_35'] = B_35 * np.log2(1 + PTX_35 * 4 * channel_gain_35 / noise_power_35) / 1e6
     df28.loc[:,'Capacity_28'] = B_35 * np.log2(1 + PTX_28 * channel_gain_28 / noise_power_28) / 1e6
     
@@ -215,6 +237,8 @@ def train_classifier(df):
 
     w = len(y_train[y_train == 0]) / (eps + len(y_train[y_train == 1]))
     
+    print('Positive class weight: {}'.format(w))
+    
     classifier = xgb.XGBClassifier(seed=seed, learning_rate=0.05, n_estimators=1000, max_depth=8, scale_pos_weight=w, silent=True)
     #classifier.get_params().keys()
     
@@ -269,25 +293,23 @@ def predict_handover(df, clf):
        
     return y_pred
 
-#create_dataset()
-df_=pd.read_csv('dataset/dataset.csv')
+#create_dataset() # only uncomment for the first run.
+df_ = pd.read_csv('dataset.csv')
 
 # Dataset column names
 # 0 user ID
-# 1-256 real H35
-# 257-512 imag 35
-# 513-515 (x,y,z) of user ID
-# 516 capacity rate_35 in MHz
-# 517-772 is real H28
-# 773-1028 is imag H28
-# 1029 capacity_rate_28 in MHz
+# 1-3  (x,y,z) of user ID
+# 4-67 real H35
+# 68-131 imag 35
+# 132 capacity rate_35 in MHz
+# 133-388 real H28
+# 389-644 imag H28
+# 645 capacity_rate_28 in MHz
 
 df = df_.iloc[:max_users,:]
 del df_
 
-# Give better names of the columns.
-df = df[['Capacity_35', 'Capacity_28', '513', '514']]#, '515']]
-df.columns = ['Capacity_35', 'Capacity_28', 'lon', 'lat']#, 'height']
+df = df[['Capacity_35', 'Capacity_28', 'lon', 'lat', 'height']]
 
 # َQ: Is there a correlation between the channels?
 
