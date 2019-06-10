@@ -39,6 +39,9 @@ rate_threshold_28 = 2.9
 PTX_35 = 1 # in Watts for 3.5 GHz
 PTX_28 = 1 # in Watts for 28 GHz
 
+p_blockage = 0.5
+blockage_loss = 40 # in dB
+
 delta_f_35 = 180e3 # Hz/subcarrier
 delta_f_28 = 180e3 # Hz/subcarrier
 N_SC_35 = 1
@@ -121,11 +124,12 @@ def create_dataset():
         channel_gain_28.append(PTX_28 * np.vdot(H28_i, H28_i))
     
     # 3) Feature engineering: introduce RSRP mmWave and sub-6 and y
-    
-    #df35.loc[:,'RSRP_35'] = 10 * np.log10(RSRP_35).astype(float)
-    #df28.loc[:,'RSRP_28'] = 10 * np.log10(RSRP_28).astype(float)
     channel_gain_28 = np.array(channel_gain_28).astype(float)
     channel_gain_35 = np.array(channel_gain_35).astype(float)
+    
+    # introduce blockage as Bernoulli rando variable
+    p = np.randon.binomial(1, p=p_blockage)
+    channel_gain_28 *= 10 ** (p * blockage_loss/10.)
         
     noise_floor_35 = k_B * T * delta_f_35
     noise_floor_28 = k_B * T * delta_f_28
