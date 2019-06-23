@@ -30,7 +30,7 @@ seed = 0
 K_fold = 3
 learning_rate = 0.01
 max_users = 54481
-r_exploitation = 0.3
+r_exploitation = 0.4
 
 # in Mbps
 rate_threshold_35 = 4.3
@@ -44,11 +44,7 @@ frame_duration = 10
 PTX_35 = 1 # in Watts for 3.5 GHz
 PTX_28 = 1 # in Watts for 28 GHz
 
-# TODO:  Agree on these two values
-#p_blockage = 0.5 
-#p_blind_ho_succ = 0.5
-
-# TODO speed:
+# speed:
 v_s = 5 # km/h
 
 delta_f_35 = 180e3 # Hz/subcarrier
@@ -56,8 +52,9 @@ delta_f_28 = 180e3 # Hz/subcarrier
 N_SC_35 = 1
 N_SC_28 = 1
 
+mmWave_BW_multiplier = 1.2
 B_35 = N_SC_35 * delta_f_35
-B_28 = N_SC_28 * delta_f_28
+B_28 = N_SC_28 * delta_f_28 * mmWave_BW_multiplier
 Nf = 7 # dB noise fig.
 
 k_B = 1.38e-23 # Boltzmann
@@ -143,7 +140,7 @@ def create_dataset():
     #channel_gain_28 *= 10 ** (p * blockage_loss/10.)
         
     noise_floor_35 = k_B * T * delta_f_35
-    noise_floor_28 = k_B * T * delta_f_28
+    noise_floor_28 = k_B * T * delta_f_28 * mmWave_BW_multiplier
     
     noise_power_35 = 10 ** (Nf/10.) * noise_floor_35
     noise_power_28 = 10 ** (Nf/10.) * noise_floor_28
@@ -154,7 +151,7 @@ def create_dataset():
     df35 = pd.concat([df35, H35_real_8, H35_imag_8], axis=1)
     
     df35.loc[:,'Capacity_35'] = B_35 * np.log2(1 + PTX_35 * 4 * channel_gain_35 / noise_power_35) / 1e6
-    df28.loc[:,'Capacity_28'] = B_35 * np.log2(1 + PTX_28 * channel_gain_28 / noise_power_28) / 1e6
+    df28.loc[:,'Capacity_28'] = B_28 * np.log2(1 + PTX_28 * channel_gain_28 / noise_power_28) / 1e6
     
     # These columns are redundant
     df28.drop(['0', '513', '514', '515'], axis=1, inplace=True)
@@ -251,17 +248,21 @@ def plot_throughput_cdf(T):
     labels = T.columns
 
     num_bins =  50
-
+    i = 0
     for data in T:
         data_ = T[data]
 
         counts, bin_edges = np.histogram(data_, bins=num_bins, density=True)
         cdf = np.cumsum(counts) / counts.sum()
-        
+        lw = 1 + i
         ax = fig.gca()
-        ax.plot(bin_edges[1:], cdf)
+        if data == 'Optimal':
+            style = '--'
+        else:
+            style = '-'
+        ax.plot(bin_edges[1:], cdf, style, linewidth=lw)
     
-    plt.legend(labels, loc="upper left")    
+    plt.legend(labels, loc="best")    
     plt.grid()
     plt.xlabel('Throughput (Mbps)')
     plt.ylabel('Throughput CDF')    
@@ -282,10 +283,6 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     plt.xlabel(xlabel)
     
     ax = fig.gca()
- #   ax.xaxis.set_major_locator(MultipleLocator(1))
-    # Format the ticklabel to be 2 raised to the power of `x`
-#    ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: int(2**x)))
-    
     ax.set_autoscaley_on(True)
     
     plot_, = ax.plot(X, Y, 'k^-') #, label='ROC')
@@ -414,19 +411,19 @@ del df_
 
 df = df[['Capacity_35', 'Capacity_28', 'lon', 'lat', 'height']]
 
+# TODO: Later to see how this works
+# Randomly assign users to 28 GHz and 3.5 GHz
+#df.loc[:, 'Camped3.5'] = np.random.binomial(1, 0.5, df.shape[0])
+#df.loc[:, 'Camped28'] = 1 - df.loc[:, 'Camped3.5']
+
 # َQ: Is there a correlation between the channels?
 
 # ----------------------------------------------------------------------------
 # Problem I am in 3.5 GHz (src) and want to HO to 28 GHz (target)
 # ----------------------------------------------------------------------------
 
-# Assume the measurement gap is 1 second, therefore, try to predict the future 28[t + 1]
-# Create a negative lag and difference signals
-#df.loc[:,'Capacity_28_t+1'] = df.loc[:,'Capacity_28'].shift(-1)
-#df.loc[:,'Capacity_28_dt+1'] = df.loc[:,'Capacity_28'].diff(-1)
-
 # Drop the NA data (a single unwanted row)
-df.dropna(inplace=True)
+#df.dropna(inplace=True)
 
 # Define the HO criterion here.
 df['y'] = pd.DataFrame((df.loc[:,'Capacity_35'] <= rate_threshold_35) & (df.loc[:,'Capacity_28'] >= rate_threshold_28), dtype=int)
@@ -465,21 +462,10 @@ del df_legacy
 # 3) Blind handover algorithm
 ##############################################################################
 df_blind = df.copy()
-#df_blind['blockage'] = pd.DataFrame(np.random.binomial(1, p_blockage, size=df_blind.shape[0]))
-#df_blind['blind_ho_success'] = pd.DataFrame(np.random.binomial(1, p_blind_ho_succ, size=df_blind.shape[0])) # assume it succeeds only 50% of the time.
 
 df_blind['y'] = pd.DataFrame((df_blind.loc[:,'Capacity_35'] <= rate_threshold_35), dtype=int)
 df_blind.loc[df_blind['y'] == 1, 'Capacity_Blind'] = df_blind['Capacity_28']
 df_blind.loc[df_blind['y'] == 0, 'Capacity_Blind'] = df_blind['Capacity_35']
-
-## if there is no blockage, blind handover will not happen.  Stay in 3.5
-#df_blind.loc[:,'Capacity_Blind'] = df_blind.loc[df_blind['blockage'] == 0, 'Capacity_35']
-#
-## if there is blockage, blind handover will happen with a chance of success of 50%.  
-##      The throughput is 0 if the handover fails
-#df_blind.loc[(df_blind['blockage'] == 1) & (df_blind['blind_ho_success'] == 0), 'Capacity_Blind'] = 0
-##      The throughput is of the 28 GHz if the handover succeeds
-#df_blind.loc[(df_blind['blockage'] == 1) & (df_blind['blind_ho_success'] == 1), 'Capacity_Blind'] = df_blind['Capacity_28']
 
 benchmark_data_blind = df_blind.iloc[N_exploit:,:]
 del df_blind
@@ -488,15 +474,18 @@ del df_blind
 # 4) Proposed algorithm
 ##############################################################################
 
+# The height column must be deleted here before prediction is made
+df.drop(['height'], axis=1, inplace=True)
+
 # Use this for the exploitation
 train = df.iloc[:N_exploit,:]
-
 benchmark_data_proposed = df.iloc[N_exploit:,:]
 
 roc_graphs = pd.DataFrame()
 roc_auc_values = []
+
 # Change r_training and save roc1 then repeat
-X = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8]
+X = [0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9]
 for r_t in X:
     [y_pred, y_score, clf] = train_classifier(train, r_t)
     y_pred_proposed = predict_handover(benchmark_data_proposed, clf)
@@ -519,6 +508,9 @@ benchmark_data_proposed.loc[benchmark_data_proposed['y'] == 1, 'Capacity_Propose
 ##############################################################################
 # Plotting
 ##############################################################################
-data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], benchmark_data_proposed['Capacity_35'], benchmark_data_proposed['Capacity_28']], axis=1)
-data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
+#data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], benchmark_data_proposed['Capacity_35'], benchmark_data_proposed['Capacity_28']], axis=1)
+#data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
+
+data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_proposed['Capacity_35'], benchmark_data_proposed['Capacity_28']], axis=1)
+data.columns = ['Optimal', 'Proposed', 'Sub-6 only', 'mmWave only']
 plot_throughput_cdf(data)
