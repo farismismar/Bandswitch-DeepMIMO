@@ -255,10 +255,14 @@ def plot_throughput_cdf(T):
 
         counts, bin_edges = np.histogram(data_, bins=num_bins, density=True)
         cdf = np.cumsum(counts) / counts.sum()
-        lw = 1 + i
+        lw = 1 + 0.2*i
+        i += 1
         ax = fig.gca()
         if data == 'Optimal':
             style = '--'
+        elif data == 'Proposed':
+            lw = 3.5
+            style = '+-'
         else:
             style = '-'
         ax.plot(bin_edges[1:], cdf, style, linewidth=lw)
@@ -419,8 +423,8 @@ df = df[['Capacity_35', 'Capacity_28', 'lon', 'lat', 'height']]
 # Problem I am in 3.5 GHz (src) and want to HO to 28 GHz (target)
 # ----------------------------------------------------------------------------
 
-# Define the HO criterion here.
-df['y'] = pd.DataFrame((df.loc[:,'Capacity_35'] <= rate_threshold) & (df.loc[:,'Capacity_28'] >= rate_threshold), dtype=int)
+# Define the HO criterion here: Handover is denied if both are lower  
+df['y'] = pd.DataFrame((df.loc[:,'Capacity_35'] <= rate_threshold) & (df.loc[:,'Capacity_28'] <= df.loc[:,'Capacity_35']), dtype=int)
 
 # Change the order of columns to put 
 column_order = ['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28', 'y']
