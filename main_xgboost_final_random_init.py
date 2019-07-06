@@ -35,7 +35,7 @@ p_blockage = 0.4
 
 # in Mbps
 # [3.8569 3.9503 4.0436 4.1370 4.2303 4.3237 4.4170 4.5104].
-rate_threshold = 4.41
+rate_threshold = 4.1
 
 # in ms
 gap_duration = 1
@@ -53,7 +53,7 @@ delta_f_28 = 180e3 # Hz/subcarrier
 N_SC_35 = 1
 N_SC_28 = 1
 
-mmWave_BW_multiplier = 10
+mmWave_BW_multiplier = 1.39 # should be 10, but not currently.
 B_35 = N_SC_35 * delta_f_35
 B_28 = N_SC_28 * delta_f_28 * mmWave_BW_multiplier
 Nf = 7 # dB noise fig.
@@ -138,8 +138,8 @@ def create_dataset():
     for i in np.arange(max_users):
         H35_i = np.array(H35.iloc[i,:])
         H28_i = np.array(H28.iloc[i,:])
-        channel_gain_35.append(PTX_35 * np.vdot(H35_i, H35_i))
-        channel_gain_28.append(PTX_28 * np.vdot(H28_i, H28_i))
+        channel_gain_35.append(np.vdot(H35_i, H35_i))
+        channel_gain_28.append(np.vdot(H28_i, H28_i))
     
     # 3) Feature engineering: introduce RSRP mmWave and sub-6 and y
     channel_gain_28 = np.array(channel_gain_28).astype(float)
@@ -150,8 +150,8 @@ def create_dataset():
     df35.columns = ['user_id', 'lon', 'lat', 'height']
     df35 = pd.concat([df35, H35_real_8, H35_imag_8], axis=1)
     
-    df35.loc[:,'P_RX_35'] = 10*np.log10(PTX_35 * 4 * channel_gain_35) # since we slashed 256 to 64, we have 4 as extra gain.
-    df28.loc[:,'P_RX_28'] = 10*np.log10(PTX_28 * channel_gain_28) 
+    df35.loc[:,'P_RX_35'] = 10*np.log10(PTX_35 * 1e3 * 4 * channel_gain_35) # since we slashed 256 to 64, we have 4 as extra gain.
+    df28.loc[:,'P_RX_28'] = 10*np.log10(PTX_28 * 1e3 * channel_gain_28) 
     
     # These columns are redundant
     df28.drop(['0', '513', '514', '515'], axis=1, inplace=True)
@@ -424,11 +424,11 @@ df = df_.iloc[:max_users,:]
 del df_
 
 # Feature engineering: add SNR to the computation:
-noise_floor_35 = k_B * T * delta_f_35
-noise_floor_28 = k_B * T * delta_f_28
+noise_floor_35 = k_B * T * delta_f_35 * 1e3
+noise_floor_28 = k_B * T * delta_f_28 * 1e3 # in mW
 
 noise_power_35 = 10 ** (Nf/10.) * noise_floor_35
-noise_power_28 = 10 ** (Nf/10.) * noise_floor_28
+noise_power_28 = 10 ** (Nf/10.) * noise_floor_28 
 
 df['Capacity_35'] = B_35*np.log2(1 + 10**(df['P_RX_35']/10.) / noise_power_35) / 1e6
 df['Capacity_28'] = B_28*np.log2(1 + 10**(df['P_RX_28']/10.) / noise_power_28) / 1e6
