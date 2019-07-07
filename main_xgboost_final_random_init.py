@@ -377,8 +377,8 @@ def predict_handover(df, clf):
        
     return y_pred
 
-def get_beam_training_time(df, freq=28e9, horiz_beams=1):
-    return 10e-3 # 10 us in ms.
+def get_beam_training_time(df, freq=28e9, horiz_beams=32):
+    return 10e-3 * horiz_beams # 10 us in ms per beam.
 
 def get_coherence_time(df, freq):
     c = 299792458 # m/s
@@ -438,7 +438,7 @@ df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28']]
 # Compute the Effective Achievable Rates
 coherence_time_sub6 = get_coherence_time(df, freq=3.5e9)
 coherence_time_mmWave = get_coherence_time(df, freq=28e9) 
-beam_training_penalty_mmWave = get_beam_training_time(df, freq=28e9, horiz_beams=1)
+beam_training_penalty_mmWave = get_beam_training_time(df, freq=28e9)
 
 df['Capacity_28'] *= 1 - 2 * beam_training_penalty_mmWave / coherence_time_mmWave
 # TODO what is the formula for 3.5?
