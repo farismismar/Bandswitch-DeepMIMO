@@ -39,7 +39,6 @@ rate_threshold = 4.1
 
 # in ms
 gap_duration = 1
-frame_duration = 10
 
 # in Watts
 PTX_35 = 1 # in Watts for 3.5 GHz
@@ -122,19 +121,20 @@ def create_dataset():
     
     del H35_loc, H28_real, H28_imag, H28_loc
     
-    F_35 = compute_bf_codebook(M=sub6_Y, f_c=3.5e9)
-    F_28 = compute_bf_codebook(M=mmWave_Y, f_c=28e9)
+    F_35 = compute_bf_codebook(M=sub6_Y*sub6_Z, f_c=3.5e9)
+    F_28 = compute_bf_codebook(M=mmWave_Y*mmWave_Z, f_c=28e9)
     
     channel_gain_35 = []
     channel_gain_28 = []
     
+    # TODO, from here onwards is still not yet complete.
     # Compute the channel gain |h*f|
     # Beamforming is now both vertical and horizontal
     for i in np.arange(max_users):
         h35_i = np.array(H35.iloc[i,:])
         h28_i = np.array(H28.iloc[i,:])
-        h35_i = h35_i.reshape(sub6_Y, sub6_Z)
-        h28_i = h28_i.reshape(mmWave_Y, mmWave_Z)
+#        H35_i = h35_i.reshape(sub6_Y, sub6_Z)
+#        H28_i = h28_i.reshape(mmWave_Y, mmWave_Z)
         
         channel_gain_35.append(compute_optimal_gain_bf_vector(h35_i, F_35))
         channel_gain_28.append(compute_optimal_gain_bf_vector(h28_i, F_28))
@@ -144,16 +144,13 @@ def create_dataset():
     channel_gain_35 = np.array(channel_gain_35).astype(float)
     
     # Get rid of unwanted columns in 3.5
-    df35 = df35[['0', '513', '514', '515']]
+    df35 = df35[['0', 'lon', 'lat', 'height']]
     df35.columns = ['user_id', 'lon', 'lat', 'height']
-    df35 = pd.concat([df35, H35_real, H35_imag], axis=1)
-    
-    df35.loc[:,'P_RX_35'] = 10*np.log10(PTX_35 * 1e3 * channel_gain_35)
-    df28.loc[:,'P_RX_28'] = 10*np.log10(PTX_28 * 1e3 * channel_gain_28) 
-    
-    # These columns are redundant
-    df28.drop(['0', '513', '514', '515'], axis=1, inplace=True)
-    df = pd.concat([df35, df28], axis=1)
+#    df35 = pd.concat([df35, H35_real, H35_imag], axis=1)
+
+    df = df35.copy()    
+    df.loc[:,'P_RX_35'] = 10*np.log10(PTX_35 * 1e3 * channel_gain_35)
+    df.loc[:,'P_RX_28'] = 10*np.log10(PTX_28 * 1e3 * channel_gain_28)
     
     df = df.iloc[:max_users,:]
     df = df[['user_id', 'lon', 'lat', 'height', 'P_RX_35', 'P_RX_28']]
@@ -168,7 +165,7 @@ def compute_optimal_gain_bf_vector(h, F):
 
     for code_index in np.arange(MK):
         f_i = F[:,code_index]
-        channel_gain = np.vdot(h, f_i)
+        channel_gain = abs(np.vdot(h, f_i)) ** 2
         if (channel_gain > max_gain):
             max_gain = channel_gain
             
@@ -443,11 +440,10 @@ def get_coherence_time(df, freq):
     if (freq < 20e9): # sub-6
         T = c / (freq * v_s * 1000/3600) * 1e3 
         print('INFO: Coherence time for sub-6 is {} ms'.format(T))
-        return T * np.ones(n) # in ms
+        return T #* np.ones(n) # in ms
 
 #df_ = create_dataset() # only uncomment for the first run, when the channel consideration changed.
 df_ = pd.read_csv('dataset.csv')
-
 
 df = df_.iloc[:max_users,:]
 del df_
@@ -470,9 +466,11 @@ coherence_time_mmWave = get_coherence_time(df, freq=28e9)
 beam_training_penalty_mmWave = get_beam_training_time(df, freq=28e9, horiz_beams=8, vertical_beams=32)
 beam_training_penalty_sub6 = get_beam_training_time(df, freq=2.1e9, horiz_beams=8, vertical_beams=8)
 
-# Write the formula in Paper
-coeff_sub6 = (coherence_time_sub6 - beam_training_penalty_sub6) / coherence_time_sub6
-coeff_mmWave = (coherence_time_mmWave - beam_training_penalty_mmWave) / coherence_time_mmWave
+# Write the formulas in Paper
+coeff_sub6_no_ho = (coherence_time_sub6 - beam_training_penalty_sub6) / coherence_time_sub6
+coeff_mmWave_no_ho = (coherence_time_mmWave - beam_training_penalty_mmWave) / coherence_time_mmWave
+coeff_sub6_ho = (coherence_time_sub6 - beam_training_penalty_sub6 - gap_duration) / coherence_time_sub6
+coeff_mmWave_ho = (coherence_time_mmWave - beam_training_penalty_mmWave - gap_duration) / coherence_time_mmWave
 
 # ----------------------------------------------------------------------------
 # TODO: Problem, initialize UEs randomly between 3.5 and 28 GHz (target)
@@ -484,12 +482,6 @@ df['Target'] = df['Capacity_28'].copy()
 df['Source_is_3.5'] = (df['Source'] == df['Capacity_35']) + 0
 df['Source_is_28'] = (df['Source'] == df['Capacity_28']) + 0
 
-# Apply the effective rate formula
-df.loc[(df['Source_is_3.5'] == 1), 'Source'] *= coeff_sub6
-df.loc[(df['Source_is_3.5'] == 1), 'Target'] *= coeff_mmWave
-df.loc[(df['Source_is_28'] == 1), 'Source'] *= coeff_mmWave
-df.loc[(df['Source_is_28'] == 1), 'Target'] *= coeff_sub6
-
 df['y'] = pd.DataFrame((df.loc[:,'Source'] < rate_threshold) & (df.loc[:,'Target'] >= df.loc[:,'Source']), dtype=int)
 
 # Change the order of columns to put 
@@ -500,17 +492,26 @@ df = df[column_order]
 # 1) Optimal algorithm
 ##############################################################################
 df_optimal = df.copy()
+df_optimal_ = df.copy()
 
 df_optimal['y'] = pd.DataFrame((df_optimal.loc[:,'Source'] < rate_threshold) & (df_optimal.loc[:,'Target'] >= df_optimal.loc[:,'Source']), dtype=int)
 
 # Now, apply the handover algorithm
-df_optimal.loc[df_optimal['y'] == 0, 'Capacity_Optimal'] = df_optimal.loc[df_optimal['y'] == 0, 'Source'] # no handover, the throughput is the source.
-df_optimal.loc[df_optimal['y'] == 1, 'Capacity_Optimal'] = (1 - 0 / frame_duration) * df_optimal.loc[df_optimal['y'] == 1, ['Source', 'Target']].apply(np.max, axis=1) # Handover takes place at the beginning of the frame and is NOT penalized for the gap.  It choose the max rate.
+# and compute the Effective Achievable Rate
+df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_3.5'] == 1), 'Capacity_Optimal'] = df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
+df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_28'] == 1), 'Capacity_Optimal'] = df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
+
+# create an EAR using _df_optimal
+a = df_optimal_.loc[(df_optimal_['y'] == 1) & (df_optimal_['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_ho
+b = df_optimal_.loc[(df_optimal_['y'] == 1) & (df_optimal_['Source_is_28'] == 1), 'Target'] * coeff_sub6_ho
+d = pd.DataFrame([a, b]).T
+d.fillna(0, axis=1, inplace=True)
+df_optimal.loc[df_optimal['y'] == 1, 'Capacity_Optimal'] = d.apply(np.max, axis=1) # Handover takes place at the beginning of the frame and is NOT penalized for the gap.  It choose the max rate.
       
 # Sample r_exploit data randomly from df_optimal
 benchmark_data_optimal = df_optimal.iloc[np.random.randint(low=0, high=df_optimal.shape[0], size=N_exploit), :]
 
-del df_optimal
+del df_optimal, a, b, d, df_optimal_
 
 ##############################################################################
 # 2) Legacy algorithm
@@ -518,8 +519,12 @@ del df_optimal
 df_legacy = df.copy()
 
 # Now, apply the handover algorithm
-df_legacy.loc[df_legacy['y'] == 0, 'Capacity_Legacy'] = df_legacy.loc[df_legacy['y'] == 0, 'Source'] # no handover, the throughput is the source.
-df_legacy.loc[df_legacy['y'] == 1, 'Capacity_Legacy'] = (1 - gap_duration / frame_duration) * df_legacy.loc[df_legacy['y'] == 1, 'Target'] # Handover takes place at the beginning of the frame and is penalized for the gap.
+# and compute the Effective Achievable Rate
+df_legacy.loc[(df_legacy['y'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 0)  & (df_legacy['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
+df_legacy.loc[(df_legacy['y'] == 0) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 0)  & (df_legacy['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
+
+df_legacy.loc[(df_legacy['y'] == 1) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 1)  & (df_legacy['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_ho # Handover takes place at the beginning of the frame and is penalized for the gap.
+df_legacy.loc[(df_legacy['y'] == 1) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 1)  & (df_legacy['Source_is_28'] == 1), 'Target'] * coeff_mmWave_ho # Handover takes place at the beginning of the frame and is penalized for the gap.
 ##
 
 # Sample r_exploit data randomly from df_legacy
@@ -535,8 +540,12 @@ df_blind = df.copy()
 df_blind['y'] = pd.DataFrame((df_blind.loc[:,'Source'] <= rate_threshold), dtype=int)
 
 # Now, apply the handover algorithm
-df_blind.loc[df_blind['y'] == 0, 'Capacity_Blind'] = df_blind.loc[df_blind['y'] == 0, 'Source'] # no handover, the throughput is the source.
-df_blind.loc[df_blind['y'] == 1, 'Capacity_Blind'] = (1 - 0 / frame_duration) * df_blind.loc[df_blind['y'] == 1, 'Target'] # Handover takes place at the beginning of the frame and is NOT penalized for the gap.
+# and compute the Effective Achievable Rate
+df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
+df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
+
+df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
+df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
 ##
 
 # Sample r_exploit data randomly from df_blind
@@ -603,9 +612,10 @@ benchmark_data_proposed['height'] = height
 
 # Penalize the throughput rates aka Effective Achievable Rate
 # Use the same formula as the blind formula
-
-benchmark_data_proposed.loc[benchmark_data_proposed['y'] == 0, 'Capacity_Proposed'] = benchmark_data_proposed.loc[benchmark_data_proposed['y'] == 0, 'Source'] # no handover, the throughput is the source.
-benchmark_data_proposed.loc[benchmark_data_proposed['y'] == 1, 'Capacity_Proposed'] = (1 - 0 / frame_duration) * benchmark_data_proposed.loc[benchmark_data_proposed['y'] == 1, 'Target'] # Handover takes place at the beginning of the frame and is NOT penalized for the gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
+benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
+benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
 ##
 
 ##############################################################################
