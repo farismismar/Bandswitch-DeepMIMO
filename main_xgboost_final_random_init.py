@@ -610,6 +610,10 @@ plot_confusion_matrix(y_test_proposed, y_pred_proposed, y_score_proposed)
 # Put back the height column
 benchmark_data_proposed['height'] = height
 
+# Put back the Source data
+benchmark_data_proposed['Source_is_3.5'] = df.loc[benchmark_data_proposed.index, 'Source_is_3.5']
+benchmark_data_proposed['Source_is_28'] = df.loc[benchmark_data_proposed.index, 'Source_is_28']
+
 # Penalize the throughput rates aka Effective Achievable Rate
 # Use the same formula as the blind formula
 benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
