@@ -34,8 +34,7 @@ r_exploitation = 0.4
 p_blockage = 0.4
 
 # in Mbps
-# [3.8569 3.9503 4.0436 4.1370 4.2303 4.3237 4.4170 4.5104].
-rate_threshold = 4.1
+rate_threshold = 1.4
 
 # in ms
 gap_duration = 1
@@ -52,7 +51,7 @@ delta_f_28 = 180e3 # Hz/subcarrier
 N_SC_35 = 1
 N_SC_28 = 1
 
-mmWave_BW_multiplier = 1.39 # should be 10, but not currently.
+mmWave_BW_multiplier = 10 # 10x sub-6
 B_35 = N_SC_35 * delta_f_35
 B_28 = N_SC_28 * delta_f_28 * mmWave_BW_multiplier
 Nf = 7 # dB noise fig.
