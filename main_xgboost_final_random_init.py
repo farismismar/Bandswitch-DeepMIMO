@@ -121,13 +121,12 @@ def create_dataset():
     
     del H35_loc, H28_real, H28_imag, H28_loc
     
-    F_35 = compute_bf_codebook(M=sub6_Y*sub6_Z, f_c=3.5e9)
-    F_28 = compute_bf_codebook(M=mmWave_Y*mmWave_Z, f_c=28e9)
+    F_35 = compute_bf_codebook(My=sub6_Y, Mz=sub6_Z, f_c=3.5e9)
+    F_28 = compute_bf_codebook(My=mmWave_Y, Mz=mmWave_Z, f_c=28e9)
     
     channel_gain_35 = []
     channel_gain_28 = []
     
-    # TODO, from here onwards is still not yet complete.
     # Compute the channel gain |h*f|
     # Beamforming is now both vertical and horizontal
     for i in np.arange(max_users):
@@ -171,15 +170,25 @@ def compute_optimal_gain_bf_vector(h, F):
             
     return channel_gain
     
-def compute_bf_codebook(M, f_c, k_oversampling=1):
-    F = np.zeros([M, M*k_oversampling], dtype=complex) # F is M rows by Mk columns, where M corresponds to the antennas in the horizontal direction
+def compute_bf_codebook(My, Mz, f_c, k_oversampling=1):
+    Fy = np.zeros([My, My*k_oversampling], dtype=complex) # F is M rows by Mk columns, where M corresponds to the antennas in the horizontal direction
 
-    theta_n = math.pi * np.arange(start=0., stop=1., step=1./(k_oversampling*M))
+    theta_y_n = math.pi * np.arange(start=0., stop=1., step=1./(k_oversampling*My))
 
-    for n in np.arange(M*k_oversampling):
-        f_n = _compute_bf_vector(f_c, theta_n[n], M)
-        F[:,n] = f_n
+    for n in np.arange(My*k_oversampling):
+        f_n = _compute_bf_vector(f_c, theta_y_n[n], My)
+        Fy[:,n] = f_n
             
+    Fz = np.zeros([Mz, Mz*k_oversampling], dtype=complex) # F is M rows by Mk columns, where M corresponds to the antennas in the horizontal direction
+
+    theta_z_n = math.pi * np.arange(start=0., stop=1., step=1./(k_oversampling*Mz))
+
+    for n in np.arange(Mz*k_oversampling):
+        f_n = _compute_bf_vector(f_c, theta_z_n[n], Mz)
+        Fz[:,n] = f_n
+
+    F = np.kron(Fz, Fy)
+    
     return F
 
 def _compute_bf_vector(f_c, theta, M_ULA):
