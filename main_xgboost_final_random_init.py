@@ -44,7 +44,7 @@ PTX_35 = 1 # in Watts for 3.5 GHz
 PTX_28 = 1 # in Watts for 28 GHz
 
 # speed:
-v_s = 25 # km/h not pedestrian, but vehicular speeds.
+v_s = 50 # km/h not pedestrian, but vehicular speeds.
 
 delta_f_35 = 180e3 # Hz/subcarrier
 delta_f_28 = 180e3 # Hz/subcarrier
@@ -421,34 +421,52 @@ def predict_handover(df, clf):
 def get_beam_training_time(df, freq=28e9, horiz_beams=32, vertical_beams=8):
     return 10e-3 * horiz_beams * vertical_beams # 10 us in ms per beam.
 
-def get_coherence_time(df, freq):
-    c = 299792458 # m/s
+def get_coherence_time(df, My, freq):
+    # Returns beam coherence time in ms.
     BS_x, BS_y, BS_z = [235.504198, 489.503816, 6]
     np.random.seed(seed)
 
     n = df.shape[0]    
     
-    # Check if freq is mmWave 
-    # then the beam coherence time
-    # else 
-    # OFDM coherence
-    # Constant for all users
-    
     # Obtain D
     # alpha AoA equivalent random(0, pi) or 30 to 150 degrees
-    if (freq > 20e9): # mm-Wave
-        D = ((df['lon'] - BS_x) ** 2 + (df['lat'] - BS_y) ** 2 + (df['height'] - BS_z) ** 2) ** 0.5
-        Theta_n = 102 / 64. * math.pi/180 # beamwidth approximation for ULA ### 64 antennas in the aziumuth direction # 3 dB BW of antenna
-        alpha = np.random.uniform(0, math.pi, size=n)
-        T_B = D / (v_s * 1000/3600 * np.sin(alpha)) * Theta_n / 2.
-        T = np.array(T_B).mean() * 1e3 # in ms
-        print('INFO: Average coherence time for mmWave is {} ms'.format(T))
-        return T
+
+    D = ((df['lon'] - BS_x) ** 2 + (df['lat'] - BS_y) ** 2 + (df['height'] - BS_z) ** 2) ** 0.5
+    Theta_n = 102 / My * math.pi/180 # beamwidth approximation for ULA ### 64 antennas in the aziumuth direction # 3 dB BW of antenna
+    alpha = np.random.uniform(0, math.pi, size=n)
+    T_B = D / (v_s * 1000/3600 * np.sin(alpha)) * Theta_n / 2.
+    T = np.array(T_B).mean() * 1e3 # in ms
+    print('INFO: Average coherence time is {} ms'.format(T))
+    return T
     
-    if (freq < 20e9): # sub-6
-        T = c / (freq * v_s * 1000/3600) * 1e3 
-        print('INFO: Coherence time for sub-6 is {} ms'.format(T))
-        return T #* np.ones(n) # in ms
+#def get_coherence_time(df, freq):
+#    c = 299792458 # m/s
+#    BS_x, BS_y, BS_z = [235.504198, 489.503816, 6]
+#    np.random.seed(seed)
+#
+#    n = df.shape[0]    
+#    
+#    # Check if freq is mmWave 
+#    # then the beam coherence time
+#    # else 
+#    # OFDM coherence
+#    # Constant for all users
+#    
+#    # Obtain D
+#    # alpha AoA equivalent random(0, pi) or 30 to 150 degrees
+#    if (freq > 20e9): # mm-Wave
+#        D = ((df['lon'] - BS_x) ** 2 + (df['lat'] - BS_y) ** 2 + (df['height'] - BS_z) ** 2) ** 0.5
+#        Theta_n = 102 / 64. * math.pi/180 # beamwidth approximation for ULA ### 64 antennas in the aziumuth direction # 3 dB BW of antenna
+#        alpha = np.random.uniform(0, math.pi, size=n)
+#        T_B = D / (v_s * 1000/3600 * np.sin(alpha)) * Theta_n / 2.
+#        T = np.array(T_B).mean() * 1e3 # in ms
+#        print('INFO: Average coherence time for mmWave is {} ms'.format(T))
+#        return T
+#    
+#    if (freq < 20e9): # sub-6
+#        T = c / (freq * v_s * 1000/3600) * 1e3 
+#        print('INFO: Coherence time for sub-6 is {} ms'.format(T))
+#        return T #* np.ones(n) # in ms
 
 #df_ = create_dataset() # only uncomment for the first run, when the channel consideration changed.
 df_ = pd.read_csv('dataset.csv')
@@ -469,8 +487,8 @@ df['Capacity_28'] = B_28*np.log2(1 + 10**(df['P_RX_28']/10.) / noise_power_28) /
 df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28']]
 
 # Compute the Effective Achievable Rates
-coherence_time_sub6 = get_coherence_time(df, freq=3.5e9)
-coherence_time_mmWave = get_coherence_time(df, freq=28e9) 
+coherence_time_sub6 = get_coherence_time(df, My=8, freq=3.5e9)
+coherence_time_mmWave = get_coherence_time(df, My=64, freq=28e9) 
 beam_training_penalty_mmWave = get_beam_training_time(df, freq=28e9, horiz_beams=8, vertical_beams=32)
 beam_training_penalty_sub6 = get_beam_training_time(df, freq=2.1e9, horiz_beams=8, vertical_beams=8)
 
