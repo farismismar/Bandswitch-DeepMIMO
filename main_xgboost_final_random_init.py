@@ -34,10 +34,10 @@ r_exploitation = 0.4
 p_blockage = 0.4
 
 # in Mbps
-rate_threshold = 1.4
+rate_threshold = 2.5
 
 # in ms
-gap_duration = 1
+gap_duration = 80
 
 # in Watts
 PTX_35 = 1 # in Watts for 3.5 GHz
@@ -51,7 +51,7 @@ delta_f_28 = 180e3 # Hz/subcarrier
 N_SC_35 = 1
 N_SC_28 = 1
 
-mmWave_BW_multiplier = 10 # 10x sub-6
+mmWave_BW_multiplier = 3 # x sub-6
 B_35 = N_SC_35 * delta_f_35
 B_28 = N_SC_28 * delta_f_28 * mmWave_BW_multiplier
 Nf = 7 # dB noise fig.
@@ -422,6 +422,8 @@ def get_beam_training_time(df, freq=28e9, horiz_beams=32, vertical_beams=8):
     return 10e-3 * horiz_beams * vertical_beams # 10 us in ms per beam.
 
 def get_coherence_time(df, My, freq):
+    
+    return 120
     # Returns beam coherence time in ms.
     BS_x, BS_y, BS_z = [235.504198, 489.503816, 6]
     np.random.seed(seed)
@@ -498,6 +500,8 @@ coeff_mmWave_no_ho = (coherence_time_mmWave - beam_training_penalty_mmWave) / co
 coeff_sub6_ho = (coherence_time_sub6 - beam_training_penalty_sub6 - gap_duration) / coherence_time_sub6
 coeff_mmWave_ho = (coherence_time_mmWave - beam_training_penalty_mmWave - gap_duration) / coherence_time_mmWave
 
+df.to_csv('dataset_rates.csv')
+
 # ----------------------------------------------------------------------------
 # TODO: Problem, initialize UEs randomly between 3.5 and 28 GHz (target)
 # ----------------------------------------------------------------------------
@@ -528,8 +532,8 @@ df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_3.5'] == 1), 'Cap
 df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_28'] == 1), 'Capacity_Optimal'] = df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
 
 # create an EAR using _df_optimal
-a = df_optimal_.loc[(df_optimal_['y'] == 1) & (df_optimal_['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_ho
-b = df_optimal_.loc[(df_optimal_['y'] == 1) & (df_optimal_['Source_is_28'] == 1), 'Target'] * coeff_sub6_ho
+a = df_optimal_.loc[(df_optimal_['y'] == 1) & (df_optimal_['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho
+b = df_optimal_.loc[(df_optimal_['y'] == 1) & (df_optimal_['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho
 d = pd.DataFrame([a, b]).T
 d.fillna(0, axis=1, inplace=True)
 df_optimal.loc[df_optimal['y'] == 1, 'Capacity_Optimal'] = d.apply(np.max, axis=1) # Handover takes place at the beginning of the frame and is NOT penalized for the gap.  It choose the max rate.
@@ -663,7 +667,8 @@ benchmark_data_proposed['Capacity_28'] = benchmark_data_proposed['Target']
 
 data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], benchmark_data_proposed['Capacity_35'], benchmark_data_proposed['Capacity_28']], axis=1, ignore_index=True)
 data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
-data.dropna(inplace=True)
-
 data.to_csv('dataset_post.csv', index=False)
+
+data = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
+data.dropna(inplace=True)
 plot_throughput_cdf(data)
