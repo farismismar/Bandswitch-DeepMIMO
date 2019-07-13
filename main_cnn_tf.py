@@ -353,18 +353,15 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     plt.show()
 
 ##############################################################################
-def create_mlp(input_dimension, hidden_dimension, n_hidden=2):
+def create_cnn():        # TODO: args
     n_classes = 1
     
     # Check if model exists
     try:
-        model = load_model('model_fc.h5')
+        model = load_model('model_cnn.h5')
     except:
         model = Sequential()
-        model.add(Dense(units=hidden_dimension, input_dim=input_dimension, activation='relu'))
-        for h in np.arange(hidden_dimension):
-            model.add(Dense(units=hidden_dimension, activation='relu'))
-        model.add(Dense(n_classes, activation='softmax'))
+        # TODO
         model.compile(loss='binary_crossentropy', optimizer = Adam(lr=learning_rate), metrics=['accuracy'])
     
     return model
@@ -386,8 +383,9 @@ def train_classifier(df, r_training=0.8):
 
     mX, nX = X_train.shape
     
-    model = KerasClassifier(build_fn=create_mlp, verbose=0, epochs=50, batch_size=16)
+    model = KerasClassifier(build_fn=create_cnn, verbose=0, epochs=50, batch_size=16)
 
+    # TODO
     # The hyperparameters
     hidden_dims = [5,7]
     n_hiddens = [10,20]
@@ -403,7 +401,7 @@ def train_classifier(df, r_training=0.8):
     clf = grid_result.best_estimator_
 
     # clf.model.get_config()
-    grid_result.best_estimator_.model.save("model_fc.h5") 
+    grid_result.best_estimator_.model.save("model_cnn.h5") 
         
     with tf.device('/gpu:0'):
         y_pred = clf.predict(X_test_sc)
@@ -433,7 +431,7 @@ def predict_handover(df, clf):
         print('The ROC AUC for this UE in the exploitation period is {:.6f}'.format(roc_auc))
     
         # Save the value
-        f = open("figures/output_fc.txt", 'a')
+        f = open("figures/output_cnn.txt", 'a')
         f.write('ROC exploitation: {0},{1:.3f}\n'.format(r_exploitation, roc_auc))
         f.close()
 
