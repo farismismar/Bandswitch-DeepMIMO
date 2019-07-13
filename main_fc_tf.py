@@ -388,7 +388,7 @@ def train_classifier(df, r_training=0.8):
 
     mX, nX = X_train.shape
     
-    model = KerasClassifier(build_fn=create_mlp, verbose=0, epochs=20, batch_size=8)
+    model = KerasClassifier(build_fn=create_mlp, verbose=0, epochs=10, batch_size=8)
 
     # The hyperparameters
     hidden_dims = [3,5]
