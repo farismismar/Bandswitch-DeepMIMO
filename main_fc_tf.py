@@ -26,6 +26,7 @@ import tensorflow as tf
 from sklearn.utils import class_weight
 from sklearn.model_selection import GridSearchCV, train_test_split
 from keras.wrappers.scikit_learn import KerasClassifier
+from keras.backend.tensorflow_backend import set_session
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, roc_curve
@@ -43,7 +44,7 @@ scaler = StandardScaler()
 # 0) Some parameters
 seed = 0
 K_fold = 2
-learning_rate = 0.01
+learning_rate = 0.001
 max_users = 54481
 r_exploitation = 0.4
 p_blockage = 0.4
@@ -82,6 +83,11 @@ N_exploit = int(r_exploitation * max_users)
 # Add a few lines to caputre the seed for reproducibility.
 random.seed(seed)
 np.random.seed(seed)
+
+# Prevent TF backend from exhausting the GPU memory.
+#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
+#sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
+#set_session(sess)
 
 def create_dataset():
     # Takes the three.csv files and merges them in a way that is useful for the Deep Learning.
@@ -363,10 +369,10 @@ def create_mlp(input_dimension, hidden_dimension, n_hidden=2):
         model = Sequential()
         model.add(Dense(units=hidden_dimension, input_dim=input_dimension, activation='relu'))
         for h in np.arange(hidden_dimension):
-            model.add(Dense(units=hidden_dimension, activation='relu'))
-        model.add(Dense(n_classes, activation='softmax'))
+            model.add(Dense(units=hidden_dimension, use_bias=True, activation='relu'))
+        model.add(Dense(units=n_classes, input_dim=hidden_dimension, activation='relu'))
         model.compile(loss='binary_crossentropy', optimizer = Adam(lr=learning_rate), metrics=['accuracy'])
-    
+
     return model
 
 def train_classifier(df, r_training=0.8):
@@ -380,17 +386,17 @@ def train_classifier(df, r_training=0.8):
     y_test = test['y']
     
     class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
-    
+        
     X_train_sc = scaler.fit_transform(X_train)
     X_test_sc = scaler.transform(X_test)
 
     mX, nX = X_train.shape
     
-    model = KerasClassifier(build_fn=create_mlp, verbose=0, epochs=50, batch_size=16)
+    model = KerasClassifier(build_fn=create_mlp, verbose=1, epochs=5, batch_size=32)
 
     # The hyperparameters
     hidden_dims = [5,7]
-    n_hiddens = [10,20]
+    n_hiddens = [3,10]
     
     hyperparameters = dict(input_dimension=[nX], hidden_dimension=hidden_dims, n_hidden=n_hiddens)
     grid = GridSearchCV(estimator=model, param_grid=hyperparameters, n_jobs=1, cv=K_fold)
@@ -450,7 +456,6 @@ def get_beam_training_time(df, freq=28e9, horiz_beams=32, vertical_beams=8):
     return 10e-3 * horiz_beams * vertical_beams # 10 us in ms per beam.
 
 def get_coherence_time(df, My, freq):
-    
     return 120
     # Returns beam coherence time in ms.
     BS_x, BS_y, BS_z = [235.504198, 489.503816, 6]
