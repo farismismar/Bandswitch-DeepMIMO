@@ -602,7 +602,7 @@ roc_auc_values = []
 max_r_training = 0
 max_score = 0
 best_clf = None
-X = np.arange(1,10,1)/10.
+X = np.linspace(10,1,10) / 10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
