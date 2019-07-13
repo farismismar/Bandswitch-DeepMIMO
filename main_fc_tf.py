@@ -44,7 +44,7 @@ scaler = StandardScaler()
 # 0) Some parameters
 seed = 0
 K_fold = 2
-learning_rate = 0.001
+learning_rate = 0.01
 max_users = 54481
 r_exploitation = 0.4
 p_blockage = 0.4
@@ -359,19 +359,15 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     plt.show()
 
 ##############################################################################
-def create_mlp(input_dimension, hidden_dimension, n_hidden=2):
+def create_mlp(input_dimension, hidden_dimension, n_hidden):
     n_classes = 1
     
-    # Check if model exists
-    try:
-        model = load_model('model_fc.h5')
-    except:
-        model = Sequential()
-        model.add(Dense(units=hidden_dimension, input_dim=input_dimension, activation='relu'))
-        for h in np.arange(hidden_dimension):
-            model.add(Dense(units=hidden_dimension, use_bias=True, activation='relu'))
-        model.add(Dense(units=n_classes, input_dim=hidden_dimension, activation='relu'))
-        model.compile(loss='binary_crossentropy', optimizer = Adam(lr=learning_rate), metrics=['accuracy'])
+    model = Sequential()
+    model.add(Dense(units=hidden_dimension, input_dim=input_dimension, activation='relu'))
+    for h in np.arange(n_hidden):
+        model.add(Dense(units=hidden_dimension, use_bias=True, activation='relu'))
+    model.add(Dense(units=n_classes, input_dim=hidden_dimension, activation='relu'))
+    model.compile(loss='binary_crossentropy', optimizer = Adam(lr=learning_rate), metrics=['accuracy'])
 
     return model
 
@@ -392,11 +388,11 @@ def train_classifier(df, r_training=0.8):
 
     mX, nX = X_train.shape
     
-    model = KerasClassifier(build_fn=create_mlp, verbose=1, epochs=5, batch_size=32)
+    model = KerasClassifier(build_fn=create_mlp, verbose=0, epochs=20, batch_size=8)
 
     # The hyperparameters
-    hidden_dims = [5,7]
-    n_hiddens = [3,10]
+    hidden_dims = [3,5]
+    n_hiddens = [5,10]
     
     hyperparameters = dict(input_dimension=[nX], hidden_dimension=hidden_dims, n_hidden=n_hiddens)
     grid = GridSearchCV(estimator=model, param_grid=hyperparameters, n_jobs=1, cv=K_fold)
@@ -409,7 +405,7 @@ def train_classifier(df, r_training=0.8):
     clf = grid_result.best_estimator_
 
     # clf.model.get_config()
-    grid_result.best_estimator_.model.save("model_fc.h5") 
+#    grid_result.best_estimator_.model.save("model_fc.h5") 
         
     with tf.device('/gpu:0'):
         y_pred = clf.predict(X_test_sc)
