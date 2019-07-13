@@ -1,21 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Jun  4 16:08:03 2019
+Created on Sat Jul 13 06:59:21 2019
 
 @author: farismismar
 """
-
 import random
 import os
 import numpy as np
 import pandas as pd
 import math
 
-import itertools
-import xgboost as xgb
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID";
+ 
+# The GPU id to use, usually either "0" or "1";
+os.environ["CUDA_VISIBLE_DEVICES"]="0";   # My NVIDIA GTX 1080 Ti FE GPU
+
+from keras.models import Sequential, load_model
+from keras.layers import Dense
+from keras.optimizers import Adam
+from keras import backend as K
+import tensorflow as tf
+
+from sklearn.utils import class_weight
+from sklearn.model_selection import GridSearchCV, train_test_split
+from keras.wrappers.scikit_learn import KerasClassifier
+
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score, roc_curve
-from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import confusion_matrix
 
 import matplotlib
@@ -24,6 +36,8 @@ import matplotlib.ticker as tick
 from matplotlib.ticker import MultipleLocator, FuncFormatter
 
 os.chdir('/Users/farismismar/Desktop/DeepMIMO')
+
+scaler = StandardScaler()
 
 # 0) Some parameters
 seed = 0
@@ -338,42 +352,61 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     plt.show()
 
 ##############################################################################
+def create_mlp(input_dimension, hidden_dimension, n_hidden=2):
+    n_classes = 1
+    
+    # Check if model exists
+    try:
+        model = load_model('model_fc.h5')
+    except FileNotFoundError:
+        model = Sequential()
+        model.add(Dense(units=hidden_dimension, input_dim=input_dimension, activation='relu'))
+        for h in np.arange(hidden_dimension):
+            model.add(Dense(units=hidden_dimension, activation='relu'))
+        model.add(Dense(n_classes, activation='softmax'))
+        model.compile(loss='binary_crossentropy', optimizer = Adam(lr=learning_rate), metrics=['accuracy'])
+    
+    return model
+
 def train_classifier(df, r_training=0.8):
     dataset = df.copy()
     
     training, test = train_test_split(dataset, train_size=r_training, random_state=seed)
     
-    eps = 1e-9
     X_train = training.drop('y', axis=1)
     y_train = training['y']
     X_test = test.drop('y', axis=1)
     y_test = test['y']
+    
+    class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
+    
+    X_train_sc = scaler.fit_transform(X_train)
+    X_test_sc = scaler.transform(X_test)
 
-    w = len(y_train[y_train == 0]) / (eps + len(y_train[y_train == 1]))
+    mX, nX = X_train.shape
     
-    print('Positive class weight: {}'.format(w))
-    
-    classifier = xgb.XGBClassifier(seed=seed, learning_rate=0.05, n_estimators=1000, max_depth=8, scale_pos_weight=w, silent=True)
-    #classifier.get_params().keys()
-    
-    # Hyperparameters
-    alphas = np.linspace(0,1,2)
-    lambdas = np.linspace(0,1,2)
-    sample_weights = [0.5, 0.7]
-    child_weights = [0, 10]
-    objectives = ['binary:logistic']
-    gammas = [0, 0.02, 0.04]
-    
-    hyperparameters = {'reg_alpha': alphas, 'reg_lambda': lambdas, 'objective': objectives, 
-                       'colsample_bytree': sample_weights, 'min_child_weight': child_weights, 'gamma': gammas}
-  
-    gs_xgb = GridSearchCV(classifier, hyperparameters, scoring='roc_auc', cv=K_fold) # k-fold crossvalidation
-    gs_xgb.fit(X_train, y_train)
-    clf = gs_xgb.best_estimator_
-    
-    y_pred = clf.predict(X_test)
-    y_score = clf.predict_proba(X_test)
+    model = KerasClassifier(build_fn=create_mlp, verbose=0, epochs=50, batch_size=16)
 
+    # The hyperparameters
+    hidden_dims = [5,7]
+    n_hiddens = [10,20]
+    
+    hyperparameters = dict(input_dimension=[nX], hidden_dimension=hidden_dims, n_hidden=n_hiddens)
+    grid = GridSearchCV(estimator=model, param_grid=hyperparameters, n_jobs=1, cv=3)
+    
+    with tf.device('/gpu:0'):
+        grid_result = grid.fit(X_train_sc, y_train, class_weight=class_weights)
+    
+    # This is the best model
+    print(grid_result.best_params_)
+    clf = grid_result.best_estimator_
+
+    # clf.model.get_config()
+    grid_result.best_estimator_.model.save("model_fc.h5") 
+        
+    with tf.device('/gpu:0'):
+        y_pred = clf.predict(X_test_sc)
+        y_score = clf.predict_proba(X_test_sc)
     try:
         roc_auc = roc_auc_score(y_test, y_score[:,1])
         print('The Training ROC AUC for this classifier is {:.6f}'.format(roc_auc))
@@ -383,11 +416,15 @@ def train_classifier(df, r_training=0.8):
     return [y_pred, y_score, clf]
 
 def predict_handover(df, clf):
+    # The exploit phase data
     y_test = df['y']
     X_test = df.drop(['y'], axis=1)
     
-    y_pred = clf.predict(X_test)
-    y_score = clf.predict_proba(X_test)
+    X_test_sc = scaler.transform(X_test)
+    
+    with tf.device('/gpu:0'):
+        y_pred = clf.predict(X_test_sc)
+        y_score = clf.predict_proba(X_test_sc)
     
     try:
         # Compute area under ROC curve
@@ -395,7 +432,7 @@ def predict_handover(df, clf):
         print('The ROC AUC for this UE in the exploitation period is {:.6f}'.format(roc_auc))
     
         # Save the value
-        f = open("figures/output_xgboost.txt", 'a')
+        f = open("figures/output_fc.txt", 'a')
         f.write('ROC exploitation: {0},{1:.3f}\n'.format(r_exploitation, roc_auc))
         f.close()
 
@@ -407,7 +444,7 @@ def predict_handover(df, clf):
        
     return y_pred
 ##############################################################################
-    
+
 def get_beam_training_time(df, freq=28e9, horiz_beams=32, vertical_beams=8):
     return 10e-3 * horiz_beams * vertical_beams # 10 us in ms per beam.
 
