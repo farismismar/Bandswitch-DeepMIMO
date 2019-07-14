@@ -363,10 +363,10 @@ def create_mlp(input_dimension, hidden_dimension, n_hidden):
     n_classes = 1
     
     model = Sequential()
-    model.add(Dense(units=hidden_dimension, input_dim=input_dimension, activation='relu'))
+    model.add(Dense(units=hidden_dimension, input_dim=input_dimension, activation='sigmoid'))
     for h in np.arange(n_hidden):
-        model.add(Dense(units=hidden_dimension, use_bias=True, activation='relu'))
-    model.add(Dense(units=n_classes, input_dim=hidden_dimension, activation='relu'))
+        model.add(Dense(units=hidden_dimension, use_bias=True, activation='sigmoid'))
+    model.add(Dense(units=n_classes, input_dim=hidden_dimension, activation='sigmoid'))
     model.compile(loss='binary_crossentropy', optimizer = Adam(lr=learning_rate), metrics=['accuracy'])
 
     return model
@@ -382,18 +382,18 @@ def train_classifier(df, r_training=0.8):
     y_test = test['y']
     
     class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
-        
+    
     X_train_sc = scaler.fit_transform(X_train)
     X_test_sc = scaler.transform(X_test)
 
     mX, nX = X_train.shape
     
-    model = KerasClassifier(build_fn=create_mlp, verbose=0, epochs=10, batch_size=8)
+    model = KerasClassifier(build_fn=create_mlp, verbose=0, epochs=5, batch_size=32)
 
     # The hyperparameters
-    hidden_dims = [3,5]
-    n_hiddens = [5,10]
-    
+    hidden_dims = [3,5,10]
+    n_hiddens = [1,2,3]
+    K_fold = 2
     hyperparameters = dict(input_dimension=[nX], hidden_dimension=hidden_dims, n_hidden=n_hiddens)
     grid = GridSearchCV(estimator=model, param_grid=hyperparameters, n_jobs=1, cv=K_fold)
     
@@ -594,7 +594,7 @@ if (p_randomness == 0 or p_randomness == 1):
 
 # Use this for the exploitation
 train_valid, benchmark_data_proposed = train_test_split(df_proposed, test_size=r_exploitation, random_state=seed)
-    
+   
 roc_graphs = pd.DataFrame()
 roc_auc_values = []
 
