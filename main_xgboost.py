@@ -656,7 +656,7 @@ benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], 
 sub_6_capacities = sub_6_capacities.reset_index().drop(['index'], axis=1)
 mmWave_capacities = mmWave_capacities.reset_index().drop(['index'], axis=1)
 
-data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], benchmark_data_proposed['Capacity_35'], benchmark_data_proposed['Capacity_28'], sub_6_capacities, mmWave_capacities], axis=1, ignore_index=True)
+data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
 data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
 data.to_csv('dataset_post.csv', index=False)
 
