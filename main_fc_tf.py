@@ -488,6 +488,12 @@ df['Capacity_28'] = B_28*np.log2(1 + 10**(df['P_RX_28']/10.) / noise_power_28) /
 
 df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28']]
 
+user_mask = np.random.binomial(1, p_randomness, size=max_users) # 0 == user is 3.5, 1 == user is mmWave.
+df.loc[user_mask==0, 'Source'] = df.loc[user_mask==0, 'Capacity_35']
+df.loc[user_mask==1, 'Source'] = df.loc[user_mask==1, 'Capacity_28']
+df.loc[user_mask==0, 'Target'] = df.loc[user_mask==0, 'Capacity_28']
+df.loc[user_mask==1, 'Target'] = df.loc[user_mask==1, 'Capacity_35']
+
 # Compute the Effective Achievable Rates
 coherence_time_sub6 = get_coherence_time(df, My=8, freq=3.5e9)
 coherence_time_mmWave = get_coherence_time(df, My=64, freq=28e9) 
@@ -502,14 +508,11 @@ coeff_mmWave_ho = (coherence_time_mmWave - beam_training_penalty_mmWave - gap_du
 
 df.to_csv('dataset_rates.csv')
 
-user_mask = np.random.binomial(1, p_randomness, size=max_users)
-df['Source'] = df.loc[user_mask==0, 'Capacity_35']
-df['Target'] = df.loc[user_mask==0, 'Capacity_28']
-
 ##############################################################################
 df['Source_is_3.5'] = (df['Source'] == df['Capacity_35']) + 0
 df['Source_is_28'] = (df['Source'] == df['Capacity_28']) + 0
 
+# Handover is based on raw Shannon rates.
 df['y'] = pd.DataFrame((df.loc[:,'Source'] < rate_threshold) & (df.loc[:,'Target'] >= df.loc[:,'Source']), dtype=int)
 
 # Change the order of columns to put 
@@ -522,19 +525,20 @@ df = df[column_order]
 df_optimal = df.copy()
 df_optimal_ = df.copy()
 
-df_optimal['y'] = pd.DataFrame((df_optimal.loc[:,'Source'] < rate_threshold) & (df_optimal.loc[:,'Target'] >= df_optimal.loc[:,'Source']), dtype=int)
-
 # Now, apply the handover algorithm
-# and compute the Effective Achievable Rate
-df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_3.5'] == 1), 'Capacity_Optimal'] = df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
-df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_28'] == 1), 'Capacity_Optimal'] = df_optimal.loc[(df_optimal['y'] == 0) & (df_optimal['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
+# and compute the Effective Achievable Rate but no penalty for handover
 
-# create an EAR using _df_optimal
-a = df_optimal_.loc[(df_optimal_['y'] == 1) & (df_optimal_['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho
-b = df_optimal_.loc[(df_optimal_['y'] == 1) & (df_optimal_['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho
-d = pd.DataFrame([a, b]).T
-d.fillna(0, axis=1, inplace=True)
-df_optimal.loc[df_optimal['y'] == 1, 'Capacity_Optimal'] = d.apply(np.max, axis=1) # Handover takes place at the beginning of the frame and is NOT penalized for the gap.  It choose the max rate.
+a = df_optimal_.loc[(df_optimal_['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho
+b = df_optimal_.loc[(df_optimal_['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho
+c = df_optimal_.loc[(df_optimal_['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho
+d = df_optimal_.loc[(df_optimal_['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho
+
+# The NaNs here are due to p_randomness values.
+df_optimal_ = pd.DataFrame([a, b, c, d]).T
+df_optimal_.fillna(0, axis=1, inplace=True)
+
+# Choose the max rate regardless
+df_optimal.loc[:,'Capacity_Optimal'] = df_optimal_.apply(np.max, axis=1)
       
 # Sample r_exploit data randomly from df_optimal
 benchmark_data_optimal = df_optimal.iloc[np.random.randint(low=0, high=df_optimal.shape[0], size=N_exploit), :]
@@ -660,8 +664,9 @@ benchmark_data_blind = benchmark_data_blind.reset_index().drop(['index'], axis=1
 benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], axis=1)
 
 # Temporary
-benchmark_data_proposed['Capacity_35'] = benchmark_data_proposed['Source']
-benchmark_data_proposed['Capacity_28'] = benchmark_data_proposed['Target']
+# Put the coherence time penalty for no handover regardess
+benchmark_data_proposed['Capacity_35'] = benchmark_data_proposed.loc[benchmark_data_proposed['Source_is_3.5'] == 1, 'Source'] * coeff_sub6_no_ho
+benchmark_data_proposed['Capacity_28'] = benchmark_data_proposed.loc[benchmark_data_proposed['Source_is_28'] == 1, 'Source'] * coeff_mmWave_no_ho
 
 data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], benchmark_data_proposed['Capacity_35'], benchmark_data_proposed['Capacity_28']], axis=1, ignore_index=True)
 data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
