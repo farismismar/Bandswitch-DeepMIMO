@@ -39,8 +39,6 @@ from matplotlib.ticker import MultipleLocator, FuncFormatter
 
 os.chdir('/Users/farismismar/Desktop/DeepMIMO')
 
-scaler = StandardScaler()
-
 # 0) Some parameters
 seed = 0
 K_fold = 2
@@ -55,7 +53,7 @@ p_randomness = 0 # 0 = all users start in 3.5
 rate_threshold = 2.5
 
 # in ms
-gap_duration = 80
+gap_fraction = 0.6
 
 # in Watts
 PTX_35 = 1 # in Watts for 3.5 GHz
@@ -83,11 +81,6 @@ N_exploit = int(r_exploitation * max_users)
 # Add a few lines to caputre the seed for reproducibility.
 random.seed(seed)
 np.random.seed(seed)
-
-# Prevent TF backend from exhausting the GPU memory.
-#gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.333)
-#sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options))
-#set_session(sess)
 
 def create_dataset():
     # Takes the three.csv files and merges them in a way that is useful for the Deep Learning.
@@ -447,13 +440,14 @@ def predict_handover(df, clf):
        
     return y_pred
 ##############################################################################
-
+    
 def get_beam_training_time(df, freq=28e9, horiz_beams=32, vertical_beams=8):
     return 10e-3 * horiz_beams * vertical_beams # 10 us in ms per beam.
 
 def get_coherence_time(df, My, freq):
-    return 120
     # Returns beam coherence time in ms.
+    c = 299792458 # speed of light
+    
     BS_x, BS_y, BS_z = [235.504198, 489.503816, 6]
     np.random.seed(seed)
 
@@ -466,8 +460,19 @@ def get_coherence_time(df, My, freq):
     Theta_n = 102 / My * math.pi/180 # beamwidth approximation for ULA ### 64 antennas in the aziumuth direction # 3 dB BW of antenna
     alpha = np.random.uniform(0, math.pi, size=n)
     T_B = D / (v_s * 1000/3600 * np.sin(alpha)) * Theta_n / 2.
-    T = np.array(T_B).mean() * 1e3 # in ms
-    print('INFO: Average coherence time is {} ms'.format(T))
+
+    T_beam = np.array(T_B) * 1e3 # in ms
+    T_beam = np.percentile(T_beam, 1) # take the 1st percentile of coherence
+    
+    if freq >= 28e9:
+        print('INFO: mmWave channel coherence time is {} ms'.format(T_beam))
+        return T_beam        
+  
+    T_ofdm = c / (freq * v_s * 1000/3600) * 1e3 # in ms
+
+    T = min(T_ofdm, T_beam)
+
+    print('INFO: sub-6 channel coherence time is {} ms'.format(T))
     return T
 
 #df_ = create_dataset() # only uncomment for the first run, when the channel consideration changed.
@@ -497,14 +502,18 @@ df.loc[user_mask==1, 'Target'] = df.loc[user_mask==1, 'Capacity_35']
 # Compute the Effective Achievable Rates
 coherence_time_sub6 = get_coherence_time(df, My=8, freq=3.5e9)
 coherence_time_mmWave = get_coherence_time(df, My=64, freq=28e9) 
+
+gap_duration_sub6 = gap_fraction * coherence_time_sub6
+gap_duration_mmWave  = gap_fraction * coherence_time_mmWave
+
 beam_training_penalty_mmWave = get_beam_training_time(df, freq=28e9, horiz_beams=8, vertical_beams=32)
 beam_training_penalty_sub6 = get_beam_training_time(df, freq=2.1e9, horiz_beams=8, vertical_beams=8)
 
 # Write the formulas in Paper
 coeff_sub6_no_ho = (coherence_time_sub6 - beam_training_penalty_sub6) / coherence_time_sub6
 coeff_mmWave_no_ho = (coherence_time_mmWave - beam_training_penalty_mmWave) / coherence_time_mmWave
-coeff_sub6_ho = (coherence_time_sub6 - beam_training_penalty_sub6 - gap_duration) / coherence_time_sub6
-coeff_mmWave_ho = (coherence_time_mmWave - beam_training_penalty_mmWave - gap_duration) / coherence_time_mmWave
+coeff_sub6_ho = (coherence_time_sub6 - beam_training_penalty_sub6 - gap_duration_sub6) / coherence_time_sub6
+coeff_mmWave_ho = (coherence_time_mmWave - beam_training_penalty_mmWave - gap_duration_mmWave) / coherence_time_mmWave
 
 df.to_csv('dataset_rates.csv')
 
@@ -512,8 +521,13 @@ df.to_csv('dataset_rates.csv')
 df['Source_is_3.5'] = (df['Source'] == df['Capacity_35']) + 0
 df['Source_is_28'] = (df['Source'] == df['Capacity_28']) + 0
 
+exploit_indices = np.random.choice(df.shape[0], N_exploit, replace=False)
+
+sub_6_capacities = df.loc[exploit_indices, 'Capacity_35'].copy()
+mmWave_capacities = df.loc[exploit_indices, 'Capacity_28'].copy()
+
 # Handover is based on raw Shannon rates.
-df['y'] = pd.DataFrame((df.loc[:,'Source'] < rate_threshold) & (df.loc[:,'Target'] >= df.loc[:,'Source']), dtype=int)
+df['y'] = pd.DataFrame((df.loc[:,'Source'] < rate_threshold) & (df.loc[:,'Target'] >= df.loc[:,'Source']), dtype=int) 
 
 # Change the order of columns to put 
 column_order = ['lon', 'lat', 'height', 'Source', 'Target', 'Source_is_3.5', 'Source_is_28', 'y']
@@ -541,7 +555,7 @@ df_optimal_.fillna(0, axis=1, inplace=True)
 df_optimal.loc[:,'Capacity_Optimal'] = df_optimal_.apply(np.max, axis=1)
       
 # Sample r_exploit data randomly from df_optimal
-benchmark_data_optimal = df_optimal.iloc[np.random.randint(low=0, high=df_optimal.shape[0], size=N_exploit), :]
+benchmark_data_optimal = df_optimal.iloc[exploit_indices, :]
 
 del df_optimal, a, b, d, df_optimal_
 
@@ -560,7 +574,7 @@ df_legacy.loc[(df_legacy['y'] == 1) & (df_legacy['Source_is_28'] == 1), 'Capacit
 ##
 
 # Sample r_exploit data randomly from df_legacy
-benchmark_data_legacy = df_legacy.iloc[np.random.randint(low=0, high=df_legacy.shape[0], size=N_exploit), :]
+benchmark_data_legacy = df_legacy.iloc[exploit_indices, :]
 
 del df_legacy
 
@@ -576,12 +590,12 @@ df_blind['y'] = pd.DataFrame((df_blind.loc[:,'Source'] <= rate_threshold), dtype
 df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
 df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
 
-df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
-df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
+df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
+df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
 ##
 
 # Sample r_exploit data randomly from df_blind
-benchmark_data_blind = df_blind.iloc[np.random.randint(low=0, high=df_blind.shape[0], size=N_exploit), :]
+benchmark_data_blind = df_blind.iloc[exploit_indices, :]
 
 del df_blind
 
@@ -598,7 +612,12 @@ if (p_randomness == 0 or p_randomness == 1):
 
 # Use this for the exploitation
 train_valid, benchmark_data_proposed = train_test_split(df_proposed, test_size=r_exploitation, random_state=seed)
-   
+
+train_indices = pd.Int64Index(np.arange(df.shape[0])).difference(exploit_indices)
+train_valid = df_proposed.iloc[train_indices, :]
+
+benchmark_data_proposed = df_proposed.iloc[exploit_indices, :]
+
 roc_graphs = pd.DataFrame()
 roc_auc_values = []
 
@@ -606,7 +625,7 @@ roc_auc_values = []
 max_r_training = 0
 max_score = 0
 best_clf = None
-X = np.linspace(10,1,10) / 10.
+X = np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
@@ -650,25 +669,27 @@ benchmark_data_proposed['Source_is_28'] = df.loc[benchmark_data_proposed.index, 
 # Use the same formula as the blind formula
 benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
 benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
 ##
 
 ##############################################################################
 # Plotting
 ##############################################################################
+
+# Put the coherence time penalty for no handover regardess
+sub_6_capacities.iloc[:] *= coeff_sub6_no_ho
+mmWave_capacities.iloc[:] *= coeff_mmWave_no_ho
+
 benchmark_data_optimal = benchmark_data_optimal.reset_index().drop(['index'], axis=1)
 benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], axis=1)
 benchmark_data_legacy  = benchmark_data_legacy.reset_index().drop(['index'], axis=1)
 benchmark_data_blind = benchmark_data_blind.reset_index().drop(['index'], axis=1)
 benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], axis=1)
+sub_6_capacities = sub_6_capacities.reset_index().drop(['index'], axis=1)
+mmWave_capacities = mmWave_capacities.reset_index().drop(['index'], axis=1)
 
-# Temporary
-# Put the coherence time penalty for no handover regardess
-benchmark_data_proposed['Capacity_35'] = benchmark_data_proposed.loc[benchmark_data_proposed['Source_is_3.5'] == 1, 'Source'] * coeff_sub6_no_ho
-benchmark_data_proposed['Capacity_28'] = benchmark_data_proposed.loc[benchmark_data_proposed['Source_is_28'] == 1, 'Source'] * coeff_mmWave_no_ho
-
-data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], benchmark_data_proposed['Capacity_35'], benchmark_data_proposed['Capacity_28']], axis=1, ignore_index=True)
+data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
 data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
 data.to_csv('dataset_post.csv', index=False)
 
