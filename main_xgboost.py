@@ -33,10 +33,13 @@ max_users = 54481
 r_exploitation = 0.4
 p_blockage = 0.4
 
-p_randomness = 0 # 0 = all users start in 3.5
+p_randomness = 1 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold = 2.5
+rate_threshold_sub6 = 2.5
+rate_threshold_mmWave= 1.3
+
+rate_threshold = p_randomness * rate_threshold_sub6 + (1 - p_randomness) * rate_threshold_mmWave
 
 # in ms
 gap_fraction = 0.6
@@ -48,8 +51,8 @@ PTX_28 = 1 # in Watts for 28 GHz
 # speed:
 v_s = 50 # km/h not pedestrian, but vehicular speeds.
 
-delta_f_35 = 180e3 # Hz/subcarrier
-delta_f_28 = 180e3 # Hz/subcarrier
+delta_f_35 = 180e3 # Hz/PRB
+delta_f_28 = 180e3 # Hz/PRB
 N_SC_35 = 1
 N_SC_28 = 1
 
@@ -239,7 +242,7 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     plt.xlabel('Predicted label')
     
     plt.tight_layout()
-    plt.savefig('figures/conf_matrix.pdf', format='pdf')
+    plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
 def generate_roc(y_test, y_score):
     fpr, tpr, _ = roc_curve(y_test, y_score)
@@ -248,33 +251,6 @@ def generate_roc(y_test, y_score):
 
     return fpr, tpr, roc_auc_score_value 
 
-def plot_roc(fpr, tpr, roc_auc, i=0):
-    plt.figure(figsize=(8,5))
-    
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 16
-    matplotlib.rcParams['text.latex.preamble'] = [
-        r'\usepackage{amsmath}',
-        r'\usepackage{amssymb}']   
-
-    lw = 2
-    
-    plt.plot(fpr, tpr,
-         lw=lw, label="ROC curve (AUC = {:.6f})".format(roc_auc))
-    
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    plt.plot([0, 1], [0, 1], color='black', lw=lw, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.05])
-    plt.grid()
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend(loc="lower right")
-    plt.savefig('figures/roc_{0}.pdf'.format(i), format='pdf')
-    
 def plot_throughput_cdf(T):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
@@ -310,7 +286,7 @@ def plot_throughput_cdf(T):
     plt.grid()
     plt.xlabel('Throughput (Mbps)')
     plt.ylabel('Throughput CDF')
-    plt.savefig('figures/throughputs.pdf', format='pdf')
+    plt.savefig('figures/throughputs_{}.pdf'.format(p_randomness), format='pdf')
     
 def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     fig = plt.figure(figsize=(10.24,7.68))
@@ -334,7 +310,7 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     
     plt.grid(True)
     fig.tight_layout()
-    plt.savefig('figures/{}'.format(filename), format='pdf')
+    plt.savefig('figures/plot_{0}{1}'.format(p_randomness, filename), format='pdf')
     plt.show()
 
 ##############################################################################
@@ -382,7 +358,7 @@ def train_classifier(df, r_training=0.8):
 
     return [y_pred, y_score, clf]
 
-def predict_handover(df, clf):
+def predict_handover(df, clf, r_training):
     y_test = df['y']
     X_test = df.drop(['y'], axis=1)
     
@@ -395,8 +371,8 @@ def predict_handover(df, clf):
         print('The ROC AUC for this UE in the exploitation period is {:.6f}'.format(roc_auc))
     
         # Save the value
-        f = open("figures/output_xgboost.txt", 'a')
-        f.write('ROC exploitation: {0},{1:.3f}\n'.format(r_exploitation, roc_auc))
+        f = open("figures/output_xgboost_{}.txt".format(p_randomness), 'a')
+        f.write('r_exploitation {0}, r_training {1}, ROC {2:.6f}\n'.format(r_exploitation, r_training, roc_auc))
         f.close()
 
         y_pred=pd.DataFrame(y_pred)
@@ -482,7 +458,7 @@ coeff_mmWave_no_ho = (coherence_time_mmWave - beam_training_penalty_mmWave) / co
 coeff_sub6_ho = (coherence_time_sub6 - beam_training_penalty_sub6 - gap_duration_sub6) / coherence_time_sub6
 coeff_mmWave_ho = (coherence_time_mmWave - beam_training_penalty_mmWave - gap_duration_mmWave) / coherence_time_mmWave
 
-df.to_csv('dataset_rates.csv')
+df.to_csv('figures/dataset_rates_{}.csv'.format(p_randomness))
 
 ##############################################################################
 df['Source_is_3.5'] = (df['Source'] == df['Capacity_35']) + 0
@@ -596,7 +572,7 @@ X = np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
-        y_pred_proposed = predict_handover(benchmark_data_proposed, clf)
+        y_pred_proposed = predict_handover(benchmark_data_proposed, clf, r_t)
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
 
@@ -615,11 +591,11 @@ for r_t in X:
 
 # Replace all NaNs with 1.00000 since they are coming at the end
 roc_graphs = roc_graphs.fillna(1)
-roc_graphs.to_csv('roc_output.csv', index=False)
-plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training.pdf')
+roc_graphs.to_csv('figures/roc_output_{}.csv'.format(p_randomness), index=False)
+plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
 
 # Now generate data with the best classifier.
-y_pred_proposed = predict_handover(benchmark_data_proposed, best_clf)
+y_pred_proposed = predict_handover(benchmark_data_proposed, best_clf, max_r_training)
 y_score_proposed = best_clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
 y_test_proposed = benchmark_data_proposed['y']
 
@@ -658,7 +634,7 @@ mmWave_capacities = mmWave_capacities.reset_index().drop(['index'], axis=1)
 
 data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
 data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
-data.to_csv('dataset_post.csv', index=False)
+data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
 
 data = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
 data.dropna(inplace=True)
