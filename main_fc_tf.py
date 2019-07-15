@@ -39,6 +39,8 @@ from matplotlib.ticker import MultipleLocator, FuncFormatter
 
 os.chdir('/Users/farismismar/Desktop/DeepMIMO')
 
+scaler = StandardScaler()
+
 # 0) Some parameters
 seed = 0
 K_fold = 2
@@ -356,7 +358,7 @@ def create_mlp(input_dimension, hidden_dimension, n_hidden):
     n_classes = 1
     
     model = Sequential()
-    model.add(Dense(units=hidden_dimension, input_dim=input_dimension, activation='sigmoid'))
+    model.add(Dense(units=hidden_dimension, use_bias=True, input_dim=input_dimension, activation='sigmoid'))
     for h in np.arange(n_hidden):
         model.add(Dense(units=hidden_dimension, use_bias=True, activation='sigmoid'))
     model.add(Dense(units=n_classes, input_dim=hidden_dimension, activation='sigmoid'))
@@ -385,7 +387,7 @@ def train_classifier(df, r_training=0.8):
 
     # The hyperparameters
     hidden_dims = [3,5,10]
-    n_hiddens = [1,2,3]
+    n_hiddens = [1,3,5] #[1,2,3]
     K_fold = 2
     hyperparameters = dict(input_dimension=[nX], hidden_dimension=hidden_dims, n_hidden=n_hiddens)
     grid = GridSearchCV(estimator=model, param_grid=hyperparameters, n_jobs=1, cv=K_fold)
