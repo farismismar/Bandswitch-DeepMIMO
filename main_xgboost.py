@@ -28,7 +28,7 @@ os.chdir('/Users/farismismar/Desktop/DeepMIMO')
 # 0) Some parameters
 seed = 0
 K_fold = 2
-learning_rate = 0.01
+learning_rate = 0.05
 max_users = 54481
 r_exploitation = 0.4
 p_blockage = 0.4
@@ -353,7 +353,7 @@ def train_classifier(df, r_training=0.8):
     
     print('Positive class weight: {}'.format(w))
     
-    classifier = xgb.XGBClassifier(seed=seed, learning_rate=0.05, n_estimators=1000, max_depth=8, scale_pos_weight=w, silent=True)
+    classifier = xgb.XGBClassifier(seed=seed, learning_rate=learning_rate, n_estimators=1000, max_depth=8, scale_pos_weight=w, silent=True)
     #classifier.get_params().keys()
     
     # Hyperparameters
