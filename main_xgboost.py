@@ -33,13 +33,13 @@ max_users = 54481
 r_exploitation = 0.4
 p_blockage = 0.4
 
-p_randomness = 1 # 0 = all users start in 3.5
+p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.5
 rate_threshold_mmWave= 1.3
 
-rate_threshold = p_randomness * rate_threshold_sub6 + (1 - p_randomness) * rate_threshold_mmWave
+rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
 
 # in ms
 gap_fraction = 0.6
