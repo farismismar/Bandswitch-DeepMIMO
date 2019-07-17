@@ -36,7 +36,7 @@ p_blockage = 0.4
 p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.5 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
+rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
 rate_threshold_mmWave= 1.5 #1.3
 
 rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
@@ -415,8 +415,9 @@ def predict_handover(df, clf, r_training):
     except:
        print('The ROC AUC for this UE in the exploitation period is N/A')
        y_pred = None
+       roc_auc = None
        
-    return y_pred
+    return y_pred, roc_auc
 ##############################################################################
     
 def get_beam_training_time(df, freq=28e9, horiz_beams=32, vertical_beams=8):
@@ -607,11 +608,11 @@ X = [0.01, 0.03, 0.1, 0.3] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
-        y_pred_proposed = predict_handover(benchmark_data_proposed, clf, r_t)
+        y_pred_proposed, score = predict_handover(benchmark_data_proposed, clf, r_t)
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
 
-        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
+#        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
         if (score > max_score):
             max_score = score
             max_r_training = r_t
@@ -619,7 +620,7 @@ for r_t in X:
             
         roc_auc_values.append(score)
         
-        roc_graphs = pd.concat([roc_graphs, pd.DataFrame(fpr), pd.DataFrame(tpr)], axis=1)
+        roc_graphs = pd.concat([roc_graphs, pd.DataFrame(roc_auc_values)], axis=1)
     except:
         roc_auc_values.append(np.nan)
         pass

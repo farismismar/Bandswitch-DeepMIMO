@@ -260,13 +260,6 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     plt.tight_layout()
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
-def generate_roc(y_test, y_score):
-    fpr, tpr, _ = roc_curve(y_test, y_score)
-
-    roc_auc_score_value = roc_auc_score(y_test, y_score)
-
-    return fpr, tpr, roc_auc_score_value 
-
 def plot_throughput_cdf(T):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
@@ -450,7 +443,7 @@ def predict_handover(df, clf, r_training):
         y_pred = clf.predict(X_test_sc)
         y_score = clf.predict_proba(X_test_sc)
     
-try:
+    try:
         # Compute area under ROC curve
         roc_auc = roc_auc_score(y_test, y_score[:,1])
         print('The ROC AUC for this UE in the exploitation period is {:.6f}'.format(roc_auc))
@@ -465,8 +458,9 @@ try:
     except:
        print('The ROC AUC for this UE in the exploitation period is N/A')
        y_pred = None
+       roc_auc = None
        
-    return y_pred
+    return y_pred, roc_auc
 ##############################################################################    
 def get_beam_training_time(df, freq=28e9, horiz_beams=32, vertical_beams=8):
     return 10e-3 * horiz_beams * vertical_beams # 10 us in ms per beam.
@@ -660,7 +654,6 @@ for r_t in X:
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
 
-        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
         if (score > max_score):
             max_score = score
             max_r_training = r_t
@@ -668,7 +661,7 @@ for r_t in X:
             
         roc_auc_values.append(score)
         
-        roc_graphs = pd.concat([roc_graphs, pd.DataFrame(fpr), pd.DataFrame(tpr)], axis=1)
+        roc_graphs = pd.concat([roc_graphs, pd.DataFrame(roc_auc_values)], axis=1)
     except:
         roc_auc_values.append(np.nan)
         pass
