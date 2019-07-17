@@ -46,7 +46,7 @@ seed = 0
 K_fold = 2
 learning_rate = 0.05
 max_users = 54481
-r_exploitation = 0.4
+r_exploitation = 0.8
 p_blockage = 0.4
 
 p_randomness = 0 # 0 = all users start in 3.5
@@ -641,7 +641,7 @@ roc_auc_values = []
 max_r_training = 0
 max_score = 0
 best_clf = None
-X = [0.01, 0.03, 0.1, 0.3] # np.arange(1,10,1)/10.
+X = [0.001] #, 0.01, 0.1, 0.3] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
