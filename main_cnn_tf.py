@@ -650,7 +650,7 @@ X = np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
-        y_pred_proposed = predict_handover(benchmark_data_proposed, clf, r_t)
+        y_pred_proposed, score = predict_handover(benchmark_data_proposed, clf, r_t)
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
 
