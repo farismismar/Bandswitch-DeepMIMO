@@ -625,13 +625,11 @@ for r_t in X:
         roc_auc_values.append(np.nan)
         pass
 
-# Replace all NaNs with 1.00000 since they are coming at the end
-roc_graphs = roc_graphs.fillna(1)
 roc_graphs.to_csv('figures/roc_output_{}.csv'.format(p_randomness), index=False)
 plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
 
 # Now generate data with the best classifier.
-y_pred_proposed = predict_handover(benchmark_data_proposed, best_clf, max_r_training)
+y_pred_proposed, _ = predict_handover(benchmark_data_proposed, best_clf, max_r_training)
 y_score_proposed = best_clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
 y_test_proposed = benchmark_data_proposed['y']
 

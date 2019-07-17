@@ -52,7 +52,7 @@ p_blockage = 0.4
 p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.12 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
+rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
 rate_threshold_mmWave= 1.3
 
 rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
@@ -662,13 +662,11 @@ for r_t in X:
         roc_auc_values.append(np.nan)
         pass
 
-# Replace all NaNs with 1.00000 since they are coming at the end
-roc_graphs = roc_graphs.fillna(1)
 roc_graphs.to_csv('figures/roc_output_{}.csv'.format(p_randomness), index=False)
 plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
 
 # Now generate data with the best classifier.
-y_pred_proposed = predict_handover(benchmark_data_proposed, best_clf, max_r_training)
+y_pred_proposed, _ = predict_handover(benchmark_data_proposed, best_clf, max_r_training)
 y_score_proposed = best_clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
 y_test_proposed = benchmark_data_proposed['y']
 
