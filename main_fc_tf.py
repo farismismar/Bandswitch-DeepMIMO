@@ -637,22 +637,21 @@ benchmark_data_proposed = df_proposed.iloc[exploit_indices, :]
 roc_graphs = pd.DataFrame()
 roc_auc_values = []
 
-# Change r_training and save roc1 then repeat
-max_r_training = 0
-max_score = 0
+min_r_training = 1
+min_score = np.inf
 best_clf = None
-X = [0.001] #, 0.01, 0.1, 0.3] # np.arange(1,10,1)/10.
+X = [0.01, 0.03, 0.1, 0.3, 0.5] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
-        y_pred_proposed, score  = predict_handover(benchmark_data_proposed, clf, r_t)
+        y_pred_proposed, score = predict_handover(benchmark_data_proposed, clf, r_t)
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
 
 #        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
-        if (score > max_score):
-            max_score = score
-            max_r_training = r_t
+        if (score < min_score):
+            min_score = score
+            min_r_training = r_t
             best_clf = clf
             
         roc_auc_values.append(score)
@@ -666,7 +665,7 @@ roc_graphs.to_csv('figures/roc_output_{}.csv'.format(p_randomness), index=False)
 plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
 
 # Now generate data with the best classifier.
-y_pred_proposed, _ = predict_handover(benchmark_data_proposed, best_clf, max_r_training)
+y_pred_proposed, _ = predict_handover(benchmark_data_proposed, best_clf, min_r_training)
 y_score_proposed = best_clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
 y_test_proposed = benchmark_data_proposed['y']
 
