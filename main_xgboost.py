@@ -36,8 +36,8 @@ p_blockage = 0.4
 p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.5
-rate_threshold_mmWave= 1.3
+rate_threshold_sub6 = 2.5 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
+rate_threshold_mmWave= 1.5 #1.3
 
 rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
 
@@ -287,6 +287,41 @@ def plot_throughput_cdf(T):
     plt.xlabel('Throughput (Mbps)')
     plt.ylabel('Throughput CDF')
     plt.savefig('figures/throughputs_{}.pdf'.format(p_randomness), format='pdf')
+
+def plot_throughput_pdf(T):
+    fig = plt.figure(figsize=(10.24, 7.68))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['text.latex.preamble'] = [
+        r'\usepackage{amsmath}',
+        r'\usepackage{amssymb}']   
+    
+    labels = [] 
+
+    num_bins = 40
+    for data in T:
+        data_ = T[data]
+
+        counts, bin_edges = np.histogram(data_, bins=num_bins, density=True)
+        pdf = counts #np.cumsum(counts) / counts.sum()
+        ax = fig.gca()
+        if data == 'mmWave only':
+            style = 'r-'
+            labels.append(data)
+        elif data == 'Sub-6 only':
+            style = 'b-'
+            labels.append(data)
+        else:
+            continue
+        ax.plot(bin_edges[1:], pdf, style, linewidth=2)
+    
+    plt.legend(labels, loc="best")    
+    plt.grid()
+    plt.xlabel('Throughput (Mbps)')
+    plt.ylabel('Throughput pdf')
+    plt.savefig('figures/throughputs_pdf_{}.pdf'.format(p_randomness), format='pdf')
     
 def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     fig = plt.figure(figsize=(10.24,7.68))
@@ -568,7 +603,7 @@ roc_auc_values = []
 max_r_training = 0
 max_score = 0
 best_clf = None
-X = np.arange(1,10,1)/10.
+X = [0.01, 0.03, 0.1, 0.3] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
@@ -635,6 +670,8 @@ mmWave_capacities = mmWave_capacities.reset_index().drop(['index'], axis=1)
 data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
 data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
 data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
+
+plot_throughput_pdf(data)
 
 data = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
 data.dropna(inplace=True)
