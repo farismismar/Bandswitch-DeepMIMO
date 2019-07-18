@@ -53,7 +53,7 @@ p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
-rate_threshold_mmWave= 1.3
+rate_threshold_mmWave= 1.3 # 0.75,1.51,2.26,3.01,3.77,4.52
 
 rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
 
