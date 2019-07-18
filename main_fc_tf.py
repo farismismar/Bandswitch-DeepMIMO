@@ -52,7 +52,7 @@ p_blockage = 0.4
 p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.12 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
+rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
 rate_threshold_mmWave= 1.3
 
 rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
@@ -222,13 +222,21 @@ def _compute_bf_vector(f_c, theta, M_ULA):
     
     return f
 
+def get_misclassification_error(y_test, y_pred, y_score):
+    cm = confusion_matrix(y_test, y_pred)
+    tn, fp, fn, tp  = cm.ravel()
+    
+    mu = (fp + fn) / (fp + fn + tn + tp)
+    
+    return cm, mu
+
 def plot_confusion_matrix(y_test, y_pred, y_score):
     # Compute confusion matrix
     classes = [0,1]
     class_names = ['Deny','Grant']
     normalize = False
     
-    cm = confusion_matrix(y_test, y_pred)
+    cm, _  = get_misclassification_error(y_test, y_pred, y_score)
     np.set_printoptions(precision=2)
     
     # Plot non-normalized confusion matrix
@@ -262,13 +270,12 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
 
-## TODO?
-def generate_roc(y_test, y_score):
-    fpr, tpr, _ = roc_curve(y_test, y_score)
+#def generate_roc(y_test, y_score):
+#    fpr, tpr, _ = roc_curve(y_test, y_score)
 
-    roc_auc_score_value = roc_auc_score(y_test, y_score)
+#    roc_auc_score_value = roc_auc_score(y_test, y_score)
 
-    return fpr, tpr, roc_auc_score_value 
+#    return fpr, tpr, roc_auc_score_value 
 
 def plot_throughput_cdf(T):
     fig = plt.figure(figsize=(10.24, 7.68))
@@ -305,6 +312,7 @@ def plot_throughput_cdf(T):
     plt.grid()
     plt.xlabel('Throughput (Mbps)')
     plt.ylabel('Throughput CDF')
+    plt.tight_layout()
     plt.savefig('figures/throughputs_{}.pdf'.format(p_randomness), format='pdf')
 
 def plot_throughput_pdf(T):
@@ -340,6 +348,7 @@ def plot_throughput_pdf(T):
     plt.grid()
     plt.xlabel('Throughput (Mbps)')
     plt.ylabel('Throughput pdf')
+    plt.tight_layout()
     plt.savefig('figures/throughputs_pdf_{}.pdf'.format(p_randomness), format='pdf')
     
 def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
@@ -365,7 +374,7 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     plt.grid(True)
     fig.tight_layout()
     plt.savefig('figures/plot_{0}{1}'.format(p_randomness, filename), format='pdf')
-    plt.show()
+#    plt.show()
 
 ##############################################################################
 def create_mlp(input_dimension, hidden_dimension, n_hidden):
@@ -636,34 +645,44 @@ train_valid = df_proposed.iloc[train_indices, :]
 benchmark_data_proposed = df_proposed.iloc[exploit_indices, :]
 
 roc_graphs = pd.DataFrame()
+misclass_graphs = pd.DataFrame()
+
 roc_auc_values = []
+misclass_error_values = []
 
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = [0.0001, 0.001, 0.01, 0.03, 0.1, 0.3] # np.arange(1,10,1)/10.
+X = [0.001, 0.01, 0.03, 0.1, 0.3, 0.5, 0.7] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
         y_pred_proposed, score = predict_handover(benchmark_data_proposed, clf, r_t)
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
-
+        _, mu = get_misclassification_error(y_test_proposed, y_pred_proposed, y_score_proposed)
+        print('The misclassification error in the exploitation period is {:.6f}'.format(mu))
 #        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
-        if (score < min_score):
-            min_score = score
+        if (mu < min_score):
+            min_score = mu
             min_r_training = r_t
             best_clf = clf
             
         roc_auc_values.append(score)
+        misclass_error_values.append(mu)
         
         roc_graphs = pd.concat([roc_graphs, pd.DataFrame(roc_auc_values)], axis=1)
+        misclass_graphs = pd.concat([misclass_graphs, pd.DataFrame(misclass_error_values)], axis=1)
+        
     except:
         roc_auc_values.append(np.nan)
+        misclass_error_values.append(np.nan)
         pass
 
 roc_graphs.to_csv('figures/roc_output_{}.csv'.format(p_randomness), index=False)
+misclass_graphs.to_csv('figures/misclass_output_{}.csv'.format(p_randomness), index=False)
 plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
+plot_primary(X, misclass_error_values, '$\mu vs Training', r'$r_\text{training}$', r'$\mu$', filename='misclass_vs_training_{}.pdf'.format(p_randomness))
 
 # Now generate data with the best classifier.
 y_pred_proposed, _ = predict_handover(benchmark_data_proposed, best_clf, min_r_training)
