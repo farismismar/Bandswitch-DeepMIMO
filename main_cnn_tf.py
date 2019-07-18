@@ -86,6 +86,7 @@ N_exploit = int(r_exploitation * max_users)
 # Add a few lines to caputre the seed for reproducibility.
 random.seed(seed)
 np.random.seed(seed)
+tf.set_random_seed(seed)
 
 def create_dataset():
     # Takes the three.csv files and merges them in a way that is useful for the Deep Learning.

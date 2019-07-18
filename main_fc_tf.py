@@ -52,7 +52,7 @@ p_blockage = 0.4
 p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
+rate_threshold_sub6 = 2.12 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
 rate_threshold_mmWave= 1.3
 
 rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
@@ -86,6 +86,7 @@ N_exploit = int(r_exploitation * max_users)
 # Add a few lines to caputre the seed for reproducibility.
 random.seed(seed)
 np.random.seed(seed)
+tf.set_random_seed(seed)
 
 def create_dataset():
     # Takes the three.csv files and merges them in a way that is useful for the Deep Learning.
@@ -640,7 +641,7 @@ roc_auc_values = []
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = [0.01, 0.03, 0.1, 0.3, 0.5] # np.arange(1,10,1)/10.
+X = [0.0001, 0.001, 0.01, 0.03, 0.1, 0.3] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
