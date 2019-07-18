@@ -49,11 +49,11 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0 # 0 = all users start in 3.5
+p_randomness = 1 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
-rate_threshold_mmWave= 1.3 # 0.75,1.51,2.26,3.01,3.77,4.52
+rate_threshold_mmWave= 1.51 # 0.75,1.51,2.26,3.01,3.77,4.52
 
 rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
 
@@ -277,6 +277,34 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
 
 #    return fpr, tpr, roc_auc_score_value 
 
+def plot_cdf(data1, label1, data2, label2):
+    fig = plt.figure(figsize=(10.24, 7.68))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['text.latex.preamble'] = [
+        r'\usepackage{amsmath}',
+        r'\usepackage{amssymb}']   
+    
+    labels = [label1, label2]
+
+    num_bins = 50
+    T = [data1, data2]
+    for data in T:
+        counts, bin_edges = np.histogram(data, bins=num_bins, density=True)
+        cdf = np.cumsum(counts) / counts.sum()
+        lw = 2
+        ax = fig.gca()
+        ax.plot(bin_edges[1:], cdf, linewidth=lw)
+    
+    plt.legend(labels, loc="best")    
+    plt.grid()
+    plt.xlabel('Coherence time (ms)')
+    plt.ylabel('Coherence time CDF')
+    plt.tight_layout()
+    plt.savefig('figures/coherence_time_{}.pdf'.format(p_randomness), format='pdf')
+    
 def plot_throughput_cdf(T):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
@@ -488,17 +516,17 @@ def get_coherence_time(df, My, freq):
     T_B = D / (v_s * 1000/3600 * np.sin(alpha)) * Theta_n / 2.
 
     T_beam = np.array(T_B) * 1e3 # in ms
-    T_beam = np.percentile(T_beam, 1) # take the 1st percentile of coherence
+  #  T_beam = np.percentile(T_beam, 1) # take the 1st percentile of coherence
     
     if freq >= 28e9:
-        print('INFO: mmWave channel coherence time is {} ms'.format(T_beam))
+        print('INFO: mmWave mean channel coherence time is {} ms'.format(T_beam.mean()))
         return T_beam        
   
-    T_ofdm = c / (freq * v_s * 1000/3600) * 1e3 # in ms
+    T_ofdm = np.ones(n) * c / (freq * v_s * 1000/3600) * 1e3 # in ms
 
-    T = min(T_ofdm, T_beam)
+    T = np.minimum(T_ofdm, T_beam)
 
-    print('INFO: sub-6 channel coherence time is {} ms'.format(T))
+    print('INFO: sub-6 mean channel coherence time is {} ms'.format(T.mean()))
     return T
 
 #df_ = create_dataset() # only uncomment for the first run, when the channel consideration changed.
@@ -528,6 +556,10 @@ df.loc[user_mask==1, 'Target'] = df.loc[user_mask==1, 'Capacity_35']
 # Compute the Effective Achievable Rates
 coherence_time_sub6 = get_coherence_time(df, My=8, freq=3.5e9)
 coherence_time_mmWave = get_coherence_time(df, My=64, freq=28e9) 
+
+plot_cdf(coherence_time_mmWave, 'mmWave', coherence_time_sub6, 'sub-6')
+coherence_time_mmWave = np.percentile(coherence_time_mmWave, 1)
+coherence_time_sub6 = np.mean(coherence_time_sub6)
 
 gap_duration_sub6 = gap_fraction * coherence_time_sub6
 gap_duration_mmWave  = gap_fraction * coherence_time_mmWave
