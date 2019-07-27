@@ -49,7 +49,7 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 1 # 0 = all users start in 3.5
+p_randomness = 0.3 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
@@ -277,7 +277,7 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
 
 #    return fpr, tpr, roc_auc_score_value 
 
-def plot_cdf(data1, label1, data2, label2):
+def plot_pdf(data1, label1, data2, label2):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
@@ -290,18 +290,23 @@ def plot_cdf(data1, label1, data2, label2):
     labels = [label1, label2]
 
     num_bins = 50
-    T = [data1, data2]
-    for data in T:
-        counts, bin_edges = np.histogram(data, bins=num_bins, density=True)
-        cdf = np.cumsum(counts) / counts.sum()
-        lw = 2
-        ax = fig.gca()
-        ax.plot(bin_edges[1:], cdf, linewidth=lw)
-    
-    plt.legend(labels, loc="best")    
-    plt.grid()
+    counts, bin_edges = np.histogram(data1, bins=num_bins, density=True)
+    pdf = counts #np.cumsum(counts) / counts.sum()
+
+    lw = 2    
     plt.xlabel('Coherence time (ms)')
-    plt.ylabel('Coherence time CDF')
+    plt.grid(True, axis='both', which='both')
+    ax = fig.gca()
+    plot1, = ax.plot(bin_edges[1:], pdf, linewidth=lw)
+    ax.set_ylabel('sub-6 Coherence time pdf')
+    
+    counts, bin_edges = np.histogram(data2, bins=num_bins, density=True)
+    pdf = counts #np.cumsum(counts) / counts.sum()
+    ax_sec = ax.twinx()
+    plot2, = ax_sec.plot(bin_edges[1:], pdf, color='red', linewidth=lw)
+    
+    plt.legend([plot1, plot2], labels, loc="best")
+    ax_sec.set_ylabel('mmWave Coherence time pdf')
     plt.tight_layout()
     plt.savefig('figures/coherence_time_{}.pdf'.format(p_randomness), format='pdf')
     
@@ -516,7 +521,7 @@ def get_coherence_time(df, My, freq):
     T_B = D / (v_s * 1000/3600 * np.sin(alpha)) * Theta_n / 2.
 
     T_beam = np.array(T_B) * 1e3 # in ms
-  #  T_beam = np.percentile(T_beam, 1) # take the 1st percentile of coherence
+    T_beam = np.percentile(T_beam, 1) # take the 1st percentile of coherence
     
     if freq >= 28e9:
         print('INFO: mmWave mean channel coherence time is {} ms'.format(T_beam.mean()))
@@ -557,7 +562,7 @@ df.loc[user_mask==1, 'Target'] = df.loc[user_mask==1, 'Capacity_35']
 coherence_time_sub6 = get_coherence_time(df, My=8, freq=3.5e9)
 coherence_time_mmWave = get_coherence_time(df, My=64, freq=28e9) 
 
-plot_cdf(coherence_time_mmWave, 'mmWave', coherence_time_sub6, 'sub-6')
+#plot_pdf(coherence_time_mmWave, 'mmWave', coherence_time_sub6, 'sub-6')
 coherence_time_mmWave = np.percentile(coherence_time_mmWave, 1)
 coherence_time_sub6 = np.mean(coherence_time_sub6)
 
