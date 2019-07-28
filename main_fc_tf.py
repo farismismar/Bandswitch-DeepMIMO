@@ -37,6 +37,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as tick
 from matplotlib.ticker import MultipleLocator, FuncFormatter
 
+import matplotlib2tikz
+    
 os.chdir('/Users/farismismar/Desktop/DeepMIMO')
 
 scaler = StandardScaler()
@@ -49,7 +51,7 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0  # 0 = all users start in 3.5
+p_randomness = 0.3  # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
@@ -240,18 +242,18 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     np.set_printoptions(precision=2)
     
     # Plot non-normalized confusion matrix
-    plt.figure(figsize=(8,5))
+    plt.figure(figsize=(10.24, 7.68))
     
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 16
+    matplotlib.rcParams['font.size'] = 40
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
     
     plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-    plt.colorbar()
+#   plt.colorbar()
     tick_marks = np.arange(len(classes))
     plt.xticks(tick_marks, class_names, rotation=0)
     plt.yticks(tick_marks, class_names)
@@ -282,7 +284,7 @@ def plot_pdf(data1, label1, data2, label2):
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['font.size'] = 40
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
@@ -309,13 +311,14 @@ def plot_pdf(data1, label1, data2, label2):
     ax_sec.set_ylabel('mmWave Coherence time pdf')
     plt.tight_layout()
     plt.savefig('figures/coherence_time_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/coherence_time_{}.tikz'.format(p_randomness))
     
 def plot_throughput_cdf(T):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['font.size'] = 40
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
@@ -347,13 +350,15 @@ def plot_throughput_cdf(T):
     plt.ylabel('Throughput CDF')
     plt.tight_layout()
     plt.savefig('figures/throughputs_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/throughputs_{}.tikz'.format(p_randomness))
+
 
 def plot_throughput_pdf(T):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['font.size'] = 40
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
@@ -383,6 +388,7 @@ def plot_throughput_pdf(T):
     plt.ylabel('Throughput pdf')
     plt.tight_layout()
     plt.savefig('figures/throughputs_pdf_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/throughputs_pdf_{}.tikz'.format(p_randomness))
     
 def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     fig = plt.figure(figsize=(10.24,7.68))
@@ -390,7 +396,7 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['font.size'] = 40
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
@@ -406,7 +412,9 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     
     plt.grid(True)
     fig.tight_layout()
-    plt.savefig('figures/plot_{0}{1}'.format(p_randomness, filename), format='pdf')
+    plt.savefig('figures/plot_{0}{1}.pdf'.format(p_randomness, filename), format='pdf')
+    matplotlib2tikz.save('figures/plot_{0}{1}.tikz'.format(p_randomness, filename))
+    
 #    plt.show()
 
 ##############################################################################
@@ -722,15 +730,11 @@ for r_t in X:
 
 roc_graphs.to_csv('figures/roc_output_{}.csv'.format(p_randomness), index=False)
 misclass_graphs.to_csv('figures/misclass_output_{}.csv'.format(p_randomness), index=False)
-plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
-plot_primary(X, misclass_error_values, '$\mu vs Training', r'$r_\text{training}$', r'$\mu$', filename='misclass_vs_training_{}.pdf'.format(p_randomness))
 
 # Now generate data with the best classifier.
 y_pred_proposed, _ = predict_handover(benchmark_data_proposed, best_clf, min_r_training)
 y_score_proposed = best_clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
 y_test_proposed = benchmark_data_proposed['y']
-
-plot_confusion_matrix(y_test_proposed, y_pred_proposed, y_score_proposed)
 
 # Put back the height column
 benchmark_data_proposed['height'] = height
@@ -750,6 +754,11 @@ benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_dat
 ##############################################################################
 # Plotting
 ##############################################################################
+
+plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
+plot_primary(X, misclass_error_values, '$\mu vs Training', r'$r_\text{training}$', r'$\mu$', filename='misclass_vs_training_{}.pdf'.format(p_randomness))
+plot_confusion_matrix(y_test_proposed, y_pred_proposed, y_score_proposed)
+
 
 # Put the coherence time penalty for no handover regardess
 sub_6_capacities.iloc[:] *= coeff_sub6_no_ho
