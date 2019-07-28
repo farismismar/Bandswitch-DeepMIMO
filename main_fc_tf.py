@@ -49,7 +49,7 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0.3 # 0 = all users start in 3.5
+p_randomness = 0  # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
@@ -448,6 +448,10 @@ def train_classifier(df, r_training=0.8):
     hyperparameters = dict(input_dimension=[nX], hidden_dimension=hidden_dims, n_hidden=n_hiddens)
     grid = GridSearchCV(estimator=model, param_grid=hyperparameters, n_jobs=1, cv=K_fold)
     
+    gpu_available = tf.test.is_gpu_available()
+    if (gpu_available == False):
+        print('WARNING: No GPU available.  Will continue with CPU.')
+        
     with tf.device('/gpu:0'):
         grid_result = grid.fit(X_train_sc, y_train, class_weight=class_weights)
     
@@ -483,7 +487,7 @@ def predict_handover(df, clf, r_training):
     try:
         # Compute area under ROC curve
         roc_auc = roc_auc_score(y_test, y_score[:,1])
-        print('The ROC AUC for this UE in the exploitation period is {:.6f}'.format(roc_auc))
+        print('The ROC AUC for the exploitation period is {:.6f}'.format(roc_auc))
     
         # Save the value
         f = open("figures/output_fc_{}.txt".format(p_randomness), 'a')
@@ -493,7 +497,7 @@ def predict_handover(df, clf, r_training):
         y_pred=pd.DataFrame(y_pred)
       
     except:
-       print('The ROC AUC for this UE in the exploitation period is N/A')
+       print('The ROC AUC for the exploitation period is N/A')
        y_pred = None
        roc_auc = None
        
