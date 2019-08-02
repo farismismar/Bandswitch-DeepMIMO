@@ -51,7 +51,7 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0.3  # 0 = all users start in 3.5
+p_randomness = 0  # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
@@ -247,7 +247,7 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['font.size'] = 30
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
@@ -265,8 +265,8 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
                  horizontalalignment="center",
                  color="white" if cm[i, j] > thresh else "black")
     
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
+    plt.ylabel(r'\textbf{True label}')
+    plt.xlabel(r'\textbf{Predicted label}')
     
     plt.tight_layout()
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
@@ -710,7 +710,7 @@ for r_t in X:
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
         _, mu = get_misclassification_error(y_test_proposed, y_pred_proposed, y_score_proposed)
-        print('The misclassification error in the exploitation period is {:.6f}'.format(mu))
+        print('The misclassification error in the exploitation period is {:.6f}%.'.format(mu*100))
 #        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
         if (mu < min_score):
             min_score = mu
@@ -756,7 +756,7 @@ benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_dat
 ##############################################################################
 
 plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
-plot_primary(X, misclass_error_values, '$\mu vs Training', r'$r_\text{training}$', r'$\mu$', filename='misclass_vs_training_{}.pdf'.format(p_randomness))
+plot_primary(X, 100*np.array(misclass_error_values), '$\mu vs Training', r'$r_\text{training}$', r'$\mu$ [\%]', filename='misclass_vs_training_{}.pdf'.format(p_randomness))
 plot_confusion_matrix(y_test_proposed, y_pred_proposed, y_score_proposed)
 
 
