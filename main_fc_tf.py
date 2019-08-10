@@ -5,8 +5,7 @@ Created on Sat Jul 13 06:59:21 2019
 
 @author: farismismar
 """
-# TODO: introduce y bar 
-# The y bar is a large threshold (always UEs will ask for HO)
+
 import random
 import os
 import numpy as np
@@ -55,13 +54,13 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0 # 0 = all users start in 3.5
+p_randomness = 1 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
 rate_threshold_mmWave= 1.51 # 0.75,1.51,2.26,3.01,3.77,4.52
 
-request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is y bar
+request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is y bar
 
 # in ms
 gap_fraction = 0.6 # rho
@@ -246,7 +245,8 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     np.set_printoptions(precision=2)
     
     # Plot non-normalized confusion matrix
-    plt.figure(figsize=(10.24, 7.68))
+    fig = plt.figure(figsize=(10.24, 7.68))
+    ax = fig.gca()
     
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
@@ -256,46 +256,48 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
     
-    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-#   plt.colorbar()
-    tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, class_names, rotation=0)
-    plt.yticks(tick_marks, class_names)
-    
+    ax.matshow(cm, interpolation='nearest', cmap=plt.cm.Blues, aspect='auto')
+    plt.xticks = np.arange(cm.shape[1])
+    plt.yticks = np.arange(cm.shape[0])
+
+    # label the ticks with the respective list entries
+    ax.set_xticklabels(['']+class_names)
+    ax.set_yticklabels(['']+class_names)
+
     fmt = '.2f' if normalize else 'd'
-    thresh = cm.max() / 2.
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, format(cm[i, j], fmt),
-                 horizontalalignment="center",
+    thresh = cm.max() / 1.5 if normalize else cm.max() / 2.
+    for i, j in itertools.product(np.arange(cm.shape[0]), np.arange(cm.shape[1])):
+        ax.text(x=j, y=i, s=format(cm[i, j], fmt),
+                 horizontalalignment="center", va='center',
                  color="white" if cm[i, j] > thresh else "black")
-    
-    plt.ylabel(r'\textbf{True label}')
+ 
     plt.xlabel(r'\textbf{Predicted label}')
+    plt.ylabel(r'\textbf{True label}')
     
     plt.tight_layout()
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
 def plot_joint_pdf(X, Y):
-
+    return
     # TODO: Fix this mess      
     # https://stackoverflow.com/questions/44786229/plotting-a-3d-meshgrid
-    fig = plt.figure(figsize=(10.24, 7.68))
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 30
-    matplotlib.rcParams['text.latex.preamble'] = [
-        r'\usepackage{amsmath}',
-        r'\usepackage{amssymb}']   
-    
-    num_bins = 50
-    pdf, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
-    pdf = pdf.T 
-
-    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
-    ax = plt.gca(projection="3d")
-    ax.plot_surface(x, y, pdf)
-    plt.show()
+#    fig = plt.figure(figsize=(10.24, 7.68))
+#    plt.rc('text', usetex=True)
+#    plt.rc('font', family='serif')
+#    matplotlib.rcParams['text.usetex'] = True
+#    matplotlib.rcParams['font.size'] = 30
+#    matplotlib.rcParams['text.latex.preamble'] = [
+#        r'\usepackage{amsmath}',
+#        r'\usepackage{amssymb}']   
+#    
+#    num_bins = 50
+#    pdf, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
+#    pdf = pdf.T 
+#
+#    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
+#    ax = plt.gca(projection="3d")
+#    ax.plot_surface(x, y, pdf)
+#    plt.show()
 
 def plot_pdf(data1, label1, data2, label2):
     fig = plt.figure(figsize=(10.24, 7.68))
