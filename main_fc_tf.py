@@ -55,7 +55,7 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0.3 # 0 = all users start in 3.5
+p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
@@ -823,7 +823,6 @@ plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC 
 plot_primary(X, 100*np.array(misclass_error_values), '$\mu vs Training', r'$r_\text{training}$', r'$\mu$ [\%]', filename='misclass_vs_training_{}.pdf'.format(p_randomness))
 plot_confusion_matrix(y_test_proposed, y_pred_proposed, y_score_proposed)
 
-
 # Put the coherence time penalty for no handover regardess
 sub_6_capacities.iloc[:] *= coeff_sub6_no_ho
 mmWave_capacities.iloc[:] *= coeff_mmWave_no_ho
@@ -836,8 +835,8 @@ benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], 
 sub_6_capacities = sub_6_capacities.reset_index().drop(['index'], axis=1)
 mmWave_capacities = mmWave_capacities.reset_index().drop(['index'], axis=1)
 
-data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
-data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
+data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_proposed['HO_requested'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
+data.columns = ['Optimal', 'Proposed', 'HO_requested', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
 data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
 
 plot_throughput_pdf(data)
