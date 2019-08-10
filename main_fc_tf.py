@@ -5,6 +5,8 @@ Created on Sat Jul 13 06:59:21 2019
 
 @author: farismismar
 """
+# TODO: introduce y bar 
+# The y bar is a large threshold (always UEs will ask for HO)
 import random
 import os
 import numpy as np
@@ -37,6 +39,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as tick
 from matplotlib.ticker import MultipleLocator, FuncFormatter
 
+from mpl_toolkits.mplot3d import Axes3D
+
 import matplotlib2tikz
     
 os.chdir('/Users/farismismar/Desktop/DeepMIMO')
@@ -51,16 +55,16 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0  # 0 = all users start in 3.5
+p_randomness = 0.3 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
 rate_threshold_mmWave= 1.51 # 0.75,1.51,2.26,3.01,3.77,4.52
 
-rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
+request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is y bar
 
 # in ms
-gap_fraction = 0.6
+gap_fraction = 0.6 # rho
 
 # in Watts
 PTX_35 = 1 # in Watts for 3.5 GHz
@@ -271,13 +275,27 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     plt.tight_layout()
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
+def plot_joint_pdf(X, Y):
 
-#def generate_roc(y_test, y_score):
-#    fpr, tpr, _ = roc_curve(y_test, y_score)
+    # TODO: Fix this mess      
+    # https://stackoverflow.com/questions/44786229/plotting-a-3d-meshgrid
+    fig = plt.figure(figsize=(10.24, 7.68))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['font.size'] = 30
+    matplotlib.rcParams['text.latex.preamble'] = [
+        r'\usepackage{amsmath}',
+        r'\usepackage{amssymb}']   
+    
+    num_bins = 50
+    pdf, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
+    pdf = pdf.T 
 
-#    roc_auc_score_value = roc_auc_score(y_test, y_score)
-
-#    return fpr, tpr, roc_auc_score_value 
+    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
+    ax = plt.gca(projection="3d")
+    ax.plot_surface(x, y, pdf)
+    plt.show()
 
 def plot_pdf(data1, label1, data2, label2):
     fig = plt.figure(figsize=(10.24, 7.68))
@@ -351,7 +369,6 @@ def plot_throughput_cdf(T):
     plt.tight_layout()
     plt.savefig('figures/throughputs_{}.pdf'.format(p_randomness), format='pdf')
     matplotlib2tikz.save('figures/throughputs_{}.tikz'.format(p_randomness))
-
 
 def plot_throughput_pdf(T):
     fig = plt.figure(figsize=(10.24, 7.68))
@@ -559,12 +576,18 @@ noise_floor_28 = k_B * T * delta_f_28 * mmWave_BW_multiplier * 1e3 # in mW
 noise_power_35 = 10 ** (Nf/10.) * noise_floor_35
 noise_power_28 = 10 ** (Nf/10.) * noise_floor_28 
 
+# Instantaneous rates (Shannon)
 df['Capacity_35'] = B_35*np.log2(1 + 10**(df['P_RX_35']/10.) / noise_power_35) / 1e6
 df['Capacity_28'] = B_28*np.log2(1 + 10**(df['P_RX_28']/10.) / noise_power_28) / 1e6
+
+# TODO 3D Plot PDF for Capacity_35 and Capacity_28
+#plot_joint_pdf(df['Capacity_35'], df['Capacity_28'])
 
 df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28']]
 
 user_mask = np.random.binomial(1, p_randomness, size=max_users) # 0 == user is 3.5, 1 == user is mmWave.
+
+# Source and Target are instantaneous rates.
 df.loc[user_mask==0, 'Source'] = df.loc[user_mask==0, 'Capacity_35']
 df.loc[user_mask==1, 'Source'] = df.loc[user_mask==1, 'Capacity_28']
 df.loc[user_mask==0, 'Target'] = df.loc[user_mask==0, 'Capacity_28']
@@ -601,11 +624,8 @@ exploit_indices = np.random.choice(df.shape[0], N_exploit, replace=False)
 sub_6_capacities = df.loc[exploit_indices, 'Capacity_35'].copy()
 mmWave_capacities = df.loc[exploit_indices, 'Capacity_28'].copy()
 
-# Handover is based on raw Shannon rates.
-df['y'] = pd.DataFrame((df.loc[:,'Source'] < rate_threshold) & (df.loc[:,'Target'] >= df.loc[:,'Source']), dtype=int) 
-
 # Change the order of columns to put 
-column_order = ['lon', 'lat', 'height', 'Source', 'Target', 'Source_is_3.5', 'Source_is_28', 'y']
+column_order = ['lon', 'lat', 'height', 'Source', 'Target', 'Source_is_3.5', 'Source_is_28']
 df = df[column_order]
 
 ##############################################################################
@@ -639,13 +659,27 @@ del df_optimal, a, b, d, df_optimal_
 ##############################################################################
 df_legacy = df.copy()
 
+# Handover is based on raw Shannon rates.
+df_legacy.loc[:, 'HO_requested'] = (df_legacy.loc[:, 'Source'] < request_handover_threshold) + 0
+df_legacy.loc[:, 'y'] = (df_legacy.loc[:,'Target'] >= df_legacy.loc[:,'Source']) + 0
+
+# No handover request means no handover granted
+df_legacy.loc[df_legacy['HO_requested'] == 0, 'y'] = 0
+
 # Now, apply the handover algorithm
 # and compute the Effective Achievable Rate
-df_legacy.loc[(df_legacy['y'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 0)  & (df_legacy['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
-df_legacy.loc[(df_legacy['y'] == 0) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 0)  & (df_legacy['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
 
-df_legacy.loc[(df_legacy['y'] == 1) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 1)  & (df_legacy['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_ho # Handover takes place at the beginning of the frame and is penalized for the gap.
-df_legacy.loc[(df_legacy['y'] == 1) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 1)  & (df_legacy['Source_is_28'] == 1), 'Target'] * coeff_mmWave_ho # Handover takes place at the beginning of the frame and is penalized for the gap.
+# Based on y_bar, if there was no handover, put the source effective rates back
+df_legacy.loc[(df_legacy['HO_requested'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover requested.
+df_legacy.loc[(df_legacy['HO_requested'] == 0) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 0) & (df_legacy['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover requested.
+
+# Handover requested, but denied.  Therefore, the source rate penalized by the gap
+df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_ho # handover requested but denied, the throughput is the source.
+df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 0) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 0) & (df_legacy['Source_is_28'] == 1), 'Source'] * coeff_mmWave_ho # handover requested but denied, the throughput is the source.
+
+# Handover requested, and granted.  Therefore, the target rate penalized by the gap
+df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 1) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 1) & (df_legacy['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_ho # handover requested and granted, the throughput is the target.
+df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 1) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 1) & (df_legacy['Source_is_28'] == 1), 'Target'] * coeff_mmWave_ho # handover requested and granted, the throughput is the target.
 ##
 
 # Sample r_exploit data randomly from df_legacy
@@ -658,15 +692,29 @@ del df_legacy
 ##############################################################################
 df_blind = df.copy()
 
-df_blind['y'] = pd.DataFrame((df_blind.loc[:,'Source'] <= rate_threshold), dtype=int)
+df_blind['HO_requested'] = pd.DataFrame((df_blind.loc[:,'Source'] <= rate_threshold), dtype=int)
+df_blind['y'] = 1
+
+# No handover request means no handover granted
+df_blind.loc[df_blind['HO_requested'] == 0, 'y'] = 0
 
 # Now, apply the handover algorithm
 # and compute the Effective Achievable Rate
-df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
-df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
+#df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
+#df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
 
-df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
-df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
+# Based on y_bar, if there was no handover, put the source effective rates back
+df_blind.loc[(df_blind['HO_requested'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source but no gap.
+df_blind.loc[(df_blind['HO_requested'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 0) & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source but no gap.
+
+# Handover requested, but denied.  Therefore, the source rate penalized but no gap
+df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source but no gap.
+df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source but no gap.
+
+# Handover requested, and granted.  Therefore, the target rate penalized but no gap
+df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # blind handover, the throughput is the target but no gap.
+df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # blind handover, the throughput is the target but no gap.
+
 ##
 
 # Sample r_exploit data randomly from df_blind
@@ -681,6 +729,12 @@ del df_blind
 # The height column must be deleted here before prediction is made
 height = df['height']
 df_proposed = df.drop(['height', 'Source_is_28'], axis=1) # delete the 28 column since it is equal to not 3.5.
+
+df_proposed['HO_requested'] = pd.DataFrame((df_proposed.loc[:,'Source'] <= request_handover_threshold), dtype=int)
+df_proposed.loc[:, 'y'] = (df_proposed.loc[:,'Target'] >= df_proposed.loc[:,'Source']) + 0
+
+# No handover request means no handover granted
+df_proposed.loc[df_proposed['HO_requested'] == 0, 'y'] = 0
 
 if (p_randomness == 0 or p_randomness == 1):
     df_proposed = df_proposed.drop(['Source_is_3.5'], axis=1) # these two values will make the column of a single value.
@@ -702,7 +756,7 @@ misclass_error_values = []
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = [0.001, 0.01, 0.03, 0.1, 0.3, 0.5, 0.7] # np.arange(1,10,1)/10.
+X = [0.4] #1e-3, 3e-3,5e-3,7e-3, 1e-2,3e-2,5e-2,7e-2,1e-1,0.4] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
@@ -745,10 +799,20 @@ benchmark_data_proposed['Source_is_28'] = df.loc[benchmark_data_proposed.index, 
 
 # Penalize the throughput rates aka Effective Achievable Rate
 # Use the same formula as the blind formula
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
+
+# Based on y_bar, if there was no handover, put the source effective rates back
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source but no gap.
+
+# Handover requested, but denied.  Therefore, the source rate penalized but no gap
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source but no gap.
+
+# Handover requested, and granted.  Therefore, the target rate penalized but no gap
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # blind handover, the throughput is the target but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # blind handover, the throughput is the target but no gap.
+
+
 ##
 
 ##############################################################################
