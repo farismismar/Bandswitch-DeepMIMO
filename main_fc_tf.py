@@ -692,7 +692,7 @@ del df_legacy
 ##############################################################################
 df_blind = df.copy()
 
-df_blind['HO_requested'] = pd.DataFrame((df_blind.loc[:,'Source'] <= rate_threshold), dtype=int)
+df_blind['HO_requested'] = pd.DataFrame((df_blind.loc[:,'Source'] <= request_handover_threshold), dtype=int)
 df_blind['y'] = 1
 
 # No handover request means no handover granted
@@ -756,7 +756,7 @@ misclass_error_values = []
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = [0.4] #1e-3, 3e-3,5e-3,7e-3, 1e-2,3e-2,5e-2,7e-2,1e-1,0.4] # np.arange(1,10,1)/10.
+X = [1e-3, 3e-3,5e-3,7e-3, 1e-2,3e-2,5e-2,7e-2,1e-1,0.4] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
