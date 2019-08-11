@@ -60,7 +60,7 @@ p_randomness = 1 # 0 = all users start in 3.5
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
 rate_threshold_mmWave= 1.51 # 0.75,1.51,2.26,3.01,3.77,4.52
 
-request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is y bar
+request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is y bar
 
 # in ms
 gap_fraction = 0.6 # rho
@@ -278,26 +278,34 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
 def plot_joint_pdf(X, Y):
-    return
-    # TODO: Fix this mess      
-    # https://stackoverflow.com/questions/44786229/plotting-a-3d-meshgrid
-#    fig = plt.figure(figsize=(10.24, 7.68))
-#    plt.rc('text', usetex=True)
-#    plt.rc('font', family='serif')
-#    matplotlib.rcParams['text.usetex'] = True
-#    matplotlib.rcParams['font.size'] = 30
-#    matplotlib.rcParams['text.latex.preamble'] = [
-#        r'\usepackage{amsmath}',
-#        r'\usepackage{amssymb}']   
-#    
-#    num_bins = 50
-#    pdf, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
-#    pdf = pdf.T 
-#
-#    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
-#    ax = plt.gca(projection="3d")
-#    ax.plot_surface(x, y, pdf)
-#    plt.show()
+    fig = plt.figure(figsize=(10.24, 7.68))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['font.size'] = 30
+    matplotlib.rcParams['text.latex.preamble'] = [
+        r'\usepackage{amsmath}',
+        r'\usepackage{amssymb}']   
+    
+    num_bins = 50
+    pdf, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
+    pdf = pdf.T 
+
+    ax = plt.gca(projection="3d")
+    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
+
+    ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], pdf[:num_bins, :num_bins], cmap='Spectral_r')
+
+    ax.set_xlabel('{} [Mbps]'.format(X.name))
+    ax.set_ylabel('{} [Mbps]'.format(Y.name))
+    ax.set_zlabel('Joint Throughput pdf')
+    ax.xaxis.labelpad=30
+    ax.yaxis.labelpad=30
+    ax.zaxis.labelpad=30
+    plt.tight_layout()
+    plt.savefig('figures/joint_throughput_pdf_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/joint_throughput_pdf_{}.tikz'.format(p_randomness))
+
 
 def plot_pdf(data1, label1, data2, label2):
     fig = plt.figure(figsize=(10.24, 7.68))
@@ -582,8 +590,8 @@ noise_power_28 = 10 ** (Nf/10.) * noise_floor_28
 df['Capacity_35'] = B_35*np.log2(1 + 10**(df['P_RX_35']/10.) / noise_power_35) / 1e6
 df['Capacity_28'] = B_28*np.log2(1 + 10**(df['P_RX_28']/10.) / noise_power_28) / 1e6
 
-# TODO 3D Plot PDF for Capacity_35 and Capacity_28
-#plot_joint_pdf(df['Capacity_35'], df['Capacity_28'])
+# 3D Plot PDF for Capacity_35 and Capacity_28
+plot_joint_pdf(df['Capacity_35'], df['Capacity_28'])
 
 df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28']]
 
