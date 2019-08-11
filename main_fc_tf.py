@@ -54,7 +54,7 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 1 # 0 = all users start in 3.5
+p_randomness = 0.3 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
@@ -294,18 +294,24 @@ def plot_joint_pdf(X, Y):
     ax = plt.gca(projection="3d")
     x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
 
-    ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], pdf[:num_bins, :num_bins], cmap='Spectral_r')
-
-    ax.set_xlabel('{} [Mbps]'.format(X.name))
-    ax.set_ylabel('{} [Mbps]'.format(Y.name))
+    surf = ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], pdf[:num_bins, :num_bins], cmap='Spectral_r', antialiased=True)
+    cb = fig.colorbar(surf, shrink=0.5)
+    
+    ax.set_xlabel('sub-6 GHz [Mbps]')
+    ax.set_ylabel('mmWave [Mbps]')
     ax.set_zlabel('Joint Throughput pdf')
-    ax.xaxis.labelpad=30
-    ax.yaxis.labelpad=30
-    ax.zaxis.labelpad=30
+    
+    ax.set_xlim(np.min(X), int(np.max(X))+1)
+    ax.set_zlim(np.min(pdf), np.max(pdf))
+
+    ax.xaxis.labelpad=20
+    ax.yaxis.labelpad=20
+    ax.zaxis.labelpad=20
+    ax.invert_xaxis()
     plt.tight_layout()
+    
     plt.savefig('figures/joint_throughput_pdf_{}.pdf'.format(p_randomness), format='pdf')
     matplotlib2tikz.save('figures/joint_throughput_pdf_{}.tikz'.format(p_randomness))
-
 
 def plot_pdf(data1, label1, data2, label2):
     fig = plt.figure(figsize=(10.24, 7.68))
@@ -374,7 +380,7 @@ def plot_throughput_cdf(T):
     
     plt.legend(labels, loc="best")    
     plt.grid()
-    plt.xlabel('Throughput (Mbps)')
+    plt.xlabel('Throughput [Mbps]')
     plt.ylabel('Throughput CDF')
     plt.tight_layout()
     plt.savefig('figures/throughputs_{}.pdf'.format(p_randomness), format='pdf')
@@ -411,7 +417,7 @@ def plot_throughput_pdf(T):
     
     plt.legend(labels, loc="best")    
     plt.grid()
-    plt.xlabel('Throughput (Mbps)')
+    plt.xlabel('Throughput [Mbps]')
     plt.ylabel('Throughput pdf')
     plt.tight_layout()
     plt.savefig('figures/throughputs_pdf_{}.pdf'.format(p_randomness), format='pdf')
@@ -589,9 +595,6 @@ noise_power_28 = 10 ** (Nf/10.) * noise_floor_28
 # Instantaneous rates (Shannon)
 df['Capacity_35'] = B_35*np.log2(1 + 10**(df['P_RX_35']/10.) / noise_power_35) / 1e6
 df['Capacity_28'] = B_28*np.log2(1 + 10**(df['P_RX_28']/10.) / noise_power_28) / 1e6
-
-# 3D Plot PDF for Capacity_35 and Capacity_28
-plot_joint_pdf(df['Capacity_35'], df['Capacity_28'])
 
 df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28']]
 
@@ -838,7 +841,6 @@ sub_6_capacities.iloc[:] *= coeff_sub6_no_ho
 mmWave_capacities.iloc[:] *= coeff_mmWave_no_ho
 
 benchmark_data_optimal = benchmark_data_optimal.reset_index().drop(['index'], axis=1)
-benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], axis=1)
 benchmark_data_legacy  = benchmark_data_legacy.reset_index().drop(['index'], axis=1)
 benchmark_data_blind = benchmark_data_blind.reset_index().drop(['index'], axis=1)
 benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], axis=1)
@@ -850,6 +852,9 @@ data.columns = ['Optimal', 'Proposed', 'HO_requested', 'Legacy', 'Blind', 'Sub-6
 data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
 
 plot_throughput_pdf(data)
+
+# 3D Plot PDF
+plot_joint_pdf(data['Sub-6 only'], data['mmWave only'])
 
 data = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
 data.dropna(inplace=True)
