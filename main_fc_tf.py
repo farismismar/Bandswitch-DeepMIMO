@@ -773,7 +773,7 @@ misclass_error_values = []
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = [0.7] #1e-3,3e-3,5e-3,7e-3,1e-2,3e-2,5e-2,7e-2,1e-1,3e-1,0.4,5e-1,7e-1] # np.arange(1,10,1)/10.
+X = 1e-3,3e-3,5e-3,7e-3,1e-2,3e-2,5e-2,7e-2,1e-1,3e-1,0.4,5e-1,7e-1] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
@@ -851,12 +851,15 @@ benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], 
 sub_6_capacities = sub_6_capacities.reset_index().drop(['index'], axis=1)
 mmWave_capacities = mmWave_capacities.reset_index().drop(['index'], axis=1)
 
+benchmark_data_proposed.loc[:,'y_true'] = benchmark_data_proposed['y'].copy()
+benchmark_data_proposed['y'] = y_pred_proposed
+
 # Summaries
 f = open('figures/handover_metrics_{}.txt'.format(p_randomness), 'w')
 for policy in ['proposed', 'legacy', 'blind']:
     d_ = eval('benchmark_data_{}'.format(policy))
-    f.write('Policy {} -- number of handovers requested in exploitation phase: {}'.format(policy, d_['HO_requested'].sum()))
-    f.write('Policy {} -- number of handovers granted in exploitation phase: {}'.format(policy, d_['y'].sum()))
+    f.write('Policy {0} -- number of handovers requested in exploitation phase: {1:.0f}\n'.format(policy, d_['HO_requested'].sum()))
+    f.write('Policy {0} -- number of handovers granted in exploitation phase: {1:.0f}\n'.format(policy, d_['y'].sum()))
 f.close()
     
 data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_proposed['HO_requested'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
