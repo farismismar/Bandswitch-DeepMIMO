@@ -54,12 +54,13 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0.3 # 0 = all users start in 3.5
+p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.54 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
-rate_threshold_mmWave= 1.51 # 0.75,1.51,2.26,3.01,3.77,4.52
+rate_threshold_sub6 = 1.72 # median
+rate_threshold_mmWave = 7.00
 
+training_request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is y bar, but only for the training data.
 request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is y bar
 
 # in ms
@@ -77,7 +78,7 @@ delta_f_28 = 180e3 # Hz/PRB
 N_SC_35 = 1
 N_SC_28 = 1
 
-mmWave_BW_multiplier = 3 # x sub-6
+mmWave_BW_multiplier = 10 # x sub-6
 B_35 = N_SC_35 * delta_f_35
 B_28 = N_SC_28 * delta_f_28 * mmWave_BW_multiplier
 Nf = 7 # dB noise fig.
@@ -370,7 +371,7 @@ def plot_throughput_cdf(T):
         i += 1
         ax = fig.gca()
         if data == 'Optimal':
-            style = '--'
+            style = '^--'
         elif data == 'Proposed':
 #            lw = 3.5
             style = '+-'
@@ -579,7 +580,7 @@ def get_coherence_time(df, My, freq):
     print('INFO: sub-6 mean channel coherence time is {} ms'.format(T.mean()))
     return T
 
-#df_ = create_dataset() # only uncomment for the first run, when the channel consideration changed.
+#df_ = create_dataset() # only uncomment for the first run, when the channel consideration changes.  Otherwise, no need.
 df_ = pd.read_csv('dataset.csv')
 
 df = df_.iloc[:max_users,:]
@@ -743,7 +744,7 @@ del df_blind
 height = df['height']
 df_proposed = df.drop(['height', 'Source_is_28'], axis=1) # delete the 28 column since it is equal to not 3.5.
 
-df_proposed['HO_requested'] = pd.DataFrame((df_proposed.loc[:,'Source'] <= request_handover_threshold), dtype=int)
+df_proposed.loc[:, 'HO_requested'] = (df_proposed.loc[:, 'Source'] < request_handover_threshold) + 0
 df_proposed.loc[:, 'y'] = (df_proposed.loc[:,'Target'] >= df_proposed.loc[:,'Source']) + 0
 
 # No handover request means no handover granted
@@ -754,6 +755,9 @@ if (p_randomness == 0 or p_randomness == 1):
 
 # Use this for the exploitation
 train_valid, benchmark_data_proposed = train_test_split(df_proposed, test_size=r_exploitation, random_state=seed)
+
+# The training and validation data get the infinity threshold (always request).
+train_valid['HO_requested'] = 1
 
 train_indices = pd.Int64Index(np.arange(df.shape[0])).difference(exploit_indices)
 train_valid = df_proposed.iloc[train_indices, :]
@@ -769,7 +773,7 @@ misclass_error_values = []
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = [1e-3, 3e-3,5e-3,7e-3, 1e-2,3e-2,5e-2,7e-2,1e-1,0.4] # np.arange(1,10,1)/10.
+X = [0.7] #1e-3,3e-3,5e-3,7e-3,1e-2,3e-2,5e-2,7e-2,1e-1,3e-1,0.4,5e-1,7e-1] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
@@ -847,6 +851,14 @@ benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], 
 sub_6_capacities = sub_6_capacities.reset_index().drop(['index'], axis=1)
 mmWave_capacities = mmWave_capacities.reset_index().drop(['index'], axis=1)
 
+# Summaries
+f = open('figures/handover_metrics_{}.txt'.format(p_randomness), 'w')
+for policy in ['proposed', 'legacy', 'blind']:
+    d_ = eval('benchmark_data_{}'.format(policy))
+    f.write('Policy {} -- number of handovers requested in exploitation phase: {}'.format(policy, d_['HO_requested'].sum()))
+    f.write('Policy {} -- number of handovers granted in exploitation phase: {}'.format(policy, d_['y'].sum()))
+f.close()
+    
 data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_proposed['HO_requested'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
 data.columns = ['Optimal', 'Proposed', 'HO_requested', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
 data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
