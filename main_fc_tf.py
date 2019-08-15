@@ -54,7 +54,7 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0 # 0 = all users start in 3.5
+p_randomness = 0.3 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 1.72 # median
@@ -238,7 +238,7 @@ def get_misclassification_error(y_test, y_pred, y_score):
 
 def plot_confusion_matrix(y_test, y_pred, y_score):
     # Compute confusion matrix
-    classes = [0,1]
+   # classes = [0,1]
     class_names = ['Deny','Grant']
     normalize = False
     
@@ -246,9 +246,11 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     np.set_printoptions(precision=2)
     
     # Plot non-normalized confusion matrix
-    fig = plt.figure(figsize=(10.24, 7.68))
+    fig = plt.figure(figsize=(10,9))
     ax = fig.gca()
-    
+    ax.set_xticks([-1,0,1])
+    ax.set_yticks([-1,0,1])
+
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
@@ -257,9 +259,7 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
     
-    ax.matshow(cm, interpolation='nearest', cmap=plt.cm.Blues, aspect='auto')
-    plt.xticks = np.arange(cm.shape[1])
-    plt.yticks = np.arange(cm.shape[0])
+    ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, aspect='auto' , origin='lower')
 
     # label the ticks with the respective list entries
     ax.set_xticklabels(['']+class_names)
@@ -274,7 +274,6 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
  
     plt.xlabel(r'\textbf{Predicted label}')
     plt.ylabel(r'\textbf{True label}')
-    
     plt.tight_layout()
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
@@ -773,7 +772,7 @@ misclass_error_values = []
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = 1e-3,3e-3,5e-3,7e-3,1e-2,3e-2,5e-2,7e-2,1e-1,3e-1,0.4,5e-1,7e-1] # np.arange(1,10,1)/10.
+X = [1e-3,3e-3,5e-3,7e-3,1e-2,3e-2,5e-2,7e-2,1e-1,3e-1,0.4,5e-1,7e-1] # np.arange(1,10,1)/10.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
@@ -781,7 +780,7 @@ for r_t in X:
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
         _, mu = get_misclassification_error(y_test_proposed, y_pred_proposed, y_score_proposed)
-        print('The misclassification error in the exploitation period is {:.6f}%.'.format(mu*100))
+        #print('The misclassification error in the exploitation period is {:.6f}%.'.format(mu*100))
 #        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
         if (mu < min_score):
             min_score = mu
