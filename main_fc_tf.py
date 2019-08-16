@@ -57,7 +57,7 @@ p_blockage = 0.4
 p_randomness =0 # 0.3 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 1.72 # median
+rate_threshold_sub6 = 2.6 # 1.72 # median
 rate_threshold_mmWave = 7.00
 
 training_request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr, but only for the training data.
@@ -254,12 +254,12 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 30
+    matplotlib.rcParams['font.size'] = 40
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
     
-    ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, aspect='auto' , origin='lower')
+    ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, aspect='auto', origin='lower')
 
     # label the ticks with the respective list entries
     ax.set_xticklabels(['']+class_names)
@@ -458,14 +458,12 @@ def plot_throughput_cdf(T, filename):
     labels = T.columns
 
     num_bins = 50
-    i = 0
+
     for data in T:
         data_ = T[data]
 
         counts, bin_edges = np.histogram(data_, bins=num_bins, density=True)
         cdf = np.cumsum(counts) / counts.sum()
-        lw = 1 + 0.2*i
-        i += 1
         ax = fig.gca()
         if data == 'mmWave only':
             style = 'r-'
@@ -478,14 +476,14 @@ def plot_throughput_cdf(T, filename):
             style = '+-'
         else:
             style = '-'
-        ax.plot(bin_edges[1:], cdf, style, linewidth=lw)
+        ax.plot(bin_edges[1:], cdf, style, linewidth=2)
     
     plt.legend(labels, loc="best")    
-    plt.grid()
+    plt.grid('both', linestyle='dashed')
+    ax.set_ylim(0, 1)
     plt.xlabel('Throughput [Mbps]')
     plt.ylabel('Throughput CDF')
-    plt.tight_layout()
-    
+    plt.tight_layout()    
     
     plt.savefig('figures/{}.pdf'.format(filename), format='pdf')
     matplotlib2tikz.save('figures/{}.tikz'.format(filename))
@@ -972,6 +970,9 @@ data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
 #plot_throughput_pdf(data)
 plot_throughput_cdf(data[['Sub-6 only', 'mmWave only']], 'throughput_cdf_{}'.format(p_randomness))
 
+diff = pd.DataFrame(data = (abs(data['mmWave only'] - data['Sub-6 only'])))
+plot_throughput_cdf(diff, 'diff_cdf_{}'.format(p_randomness))
+
 # TODO
 # 3D Plot pdf/CDF
 #plot_joint_pdf(data['Sub-6 only'], data['mmWave only'])
@@ -980,3 +981,4 @@ plot_throughput_cdf(data[['Sub-6 only', 'mmWave only']], 'throughput_cdf_{}'.for
 data = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
 data.dropna(inplace=True)
 plot_throughput_cdf(data, 'throughputs_{}'.format(p_randomness))
+
