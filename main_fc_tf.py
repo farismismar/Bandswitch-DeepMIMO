@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+z#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Sat Jul 13 06:59:21 2019
@@ -54,11 +54,11 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness =0 # 0.3 # 0 = all users start in 3.5
+p_randomness = 0.3 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.6 # 1.72 # median
-rate_threshold_mmWave = 7.00
+rate_threshold_sub6 = 1.72 # median
+rate_threshold_mmWave = 7.00 #12.5 
 
 training_request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr, but only for the training data.
 request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr
@@ -277,47 +277,11 @@ def plot_confusion_matrix(y_test, y_pred, y_score):
     plt.tight_layout()
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
-def plot_joint_pdf(X, Y):
-    fig = plt.figure(figsize=(10.24, 7.68))
-    plt.rc('text', usetex=True)
-    plt.rc('font', family='serif')
-    matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 30
-    matplotlib.rcParams['text.latex.preamble'] = [
-        r'\usepackage{amsmath}',
-        r'\usepackage{amssymb}']   
-    
-    num_bins = 50
-    pdf, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
-    pdf = pdf.T 
 
-    ax = plt.gca(projection="3d")
-    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
-
-    surf = ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], pdf[:num_bins, :num_bins], cmap='Spectral_r', antialiased=True)
-    cb = fig.colorbar(surf, shrink=0.5)
-    
-    ax.set_xlabel('sub-6 GHz [Mbps]')
-    ax.set_ylabel('mmWave [Mbps]')
-    ax.set_zlabel('Joint Throughput pdf')
-    
-    ax.set_xlim(np.min(X), int(np.max(X))+1)
-    ax.set_zlim(np.min(pdf), np.max(pdf))
-
-    ax.xaxis.labelpad=20
-    ax.yaxis.labelpad=20
-    ax.zaxis.labelpad=20
-    ax.invert_xaxis()
-    plt.tight_layout()
-    
-    plt.savefig('figures/joint_throughput_pdf_{}.pdf'.format(p_randomness), format='pdf')
-    matplotlib2tikz.save('figures/joint_throughput_pdf_{}.tikz'.format(p_randomness))
-
-# TODO: Try to build the joint CDF function.
-def plot_joint_cdf(X, Y):
+def _parula_map():
     # https://stackoverflow.com/questions/34859628/has-someone-made-the-parula-colormap-in-matplotlib
     from matplotlib.colors import LinearSegmentedColormap
-
+    
     cm_data = [[0.2081, 0.1663, 0.5292], [0.2116238095, 0.1897809524, 0.5776761905], 
      [0.212252381, 0.2137714286, 0.6269714286], [0.2081, 0.2386, 0.6770857143], 
      [0.1959047619, 0.2644571429, 0.7279], [0.1707285714, 0.2919380952, 
@@ -361,28 +325,97 @@ def plot_joint_cdf(X, Y):
      [0.9763, 0.9831, 0.0538]]
     
     parula_map = LinearSegmentedColormap.from_list('parula', cm_data)
+    
+    return parula_map
 
+def plot_joint_pdf(X, Y):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
     matplotlib.rcParams['font.size'] = 30
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
     
     num_bins = 50
-    cdf, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, 'cdf', bins=(num_bins, num_bins))
-#    cdf = np.cumsum(cdf)
-#    cdf = cdf/cdf[-1]
-#    cdf = cdf.T 
+    H, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
+    for y in np.arange(num_bins):
+        H[y,:] = H[y,:] / sum(H[y,:])
+    pdf = H / num_bins    
+    
+    ax = plt.gca(projection="3d")
+    
+    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
+
+    surf = ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], pdf[:num_bins, :num_bins], cmap=_parula_map(), antialiased=True)
+    #cb = fig.colorbar(surf, shrink=0.5)
+    ax.view_init(5, 45) # the first param rotates the z axis inwards or outwards the screen.  The second is our guy.
+    
+    # No background color    
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+    
+    # Now set color to white (or whatever is "invisible")
+    ax.xaxis.pane.set_edgecolor('w')
+    ax.yaxis.pane.set_edgecolor('w')
+    ax.zaxis.pane.set_edgecolor('w')
+
+    ax.set_xlabel('3.5 GHz')
+    ax.set_ylabel('28 GHz')
+    ax.set_zlabel('Joint Throughput pdf')
+
+    ax.invert_xaxis()
+    ax.invert_yaxis()
+        
+    ax.set_xlim(int(np.max(X)), 0)
+    ax.set_ylim(int(np.max(Y)), 0)
+    ax.set_zlim(np.min(pdf), np.max(pdf))
+        
+    ax.xaxis.labelpad=20
+    ax.yaxis.labelpad=20
+    ax.zaxis.labelpad=20
+    
+    plt.xticks([3,2,1,0])
+    plt.yticks([15,10,5,0])
+        
+    plt.tight_layout()
+    
+    plt.savefig('figures/joint_throughput_pdf_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/joint_throughput_pdf_{}.tikz'.format(p_randomness))
+
+def plot_joint_cdf(X, Y):
+    fig = plt.figure(figsize=(10.24, 7.68))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['font.size'] = 30
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['text.latex.preamble'] = [
+        r'\usepackage{amsmath}',
+        r'\usepackage{amssymb}']   
+    
+    num_bins = 50
+    H, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
+    for y in np.arange(num_bins):
+        H[y,:] = H[y,:] / sum(H[y,:])
+    pdf = H / num_bins
+    
+    cdf = np.zeros((num_bins, num_bins))
+    for i in np.arange(num_bins):
+        for j in np.arange(num_bins):
+            cdf[i,j] = sum(sum(pdf[:(i+1), :(j+1)]))
 
     ax = plt.gca(projection="3d")
     x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
 
-    surf = ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], cdf[:num_bins, :num_bins], cmap=parula_map, antialiased=True)
+    surf = ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], cdf[:num_bins, :num_bins], cmap=_parula_map(), antialiased=True)
 #    cb = fig.colorbar(surf, shrink=0.5)
-    ax.view_init(8, 40) # the first param rotates the z axis inwards or outwards the screen.  The second is our guy.
+    ax.view_init(5, 45) # the first param rotates the z axis inwards or outwards the screen.  The second is our guy.
     
     # No background color    
     ax.xaxis.pane.fill = False
@@ -398,14 +431,20 @@ def plot_joint_cdf(X, Y):
     ax.set_ylabel('28 GHz')
     ax.set_zlabel('Joint Throughput CDF')
     
-    ax.set_xlim(np.min(X), np.max(X))
-    ax.set_ylim(np.min(Y), np.max(Y))
+    ax.invert_xaxis()
+    ax.invert_yaxis()
+    
+    ax.set_xlim(int(np.max(X)), 0)
+    ax.set_ylim(int(np.max(Y)), 0)
     ax.set_zlim(0,1)
 
     ax.xaxis.labelpad=20
     ax.yaxis.labelpad=20
     ax.zaxis.labelpad=20
-    ax.invert_yaxis()
+
+    plt.xticks([3,2,1,0])
+    plt.yticks([15,10,5,0])
+    
     plt.tight_layout()
     
     plt.savefig('figures/joint_throughput_cdf_{}.pdf'.format(p_randomness), format='pdf')
@@ -417,6 +456,9 @@ def plot_pdf(data1, label1, data2, label2):
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
     matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['legend.fontsize'] =  'small'
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
@@ -445,12 +487,15 @@ def plot_pdf(data1, label1, data2, label2):
     plt.savefig('figures/coherence_time_{}.pdf'.format(p_randomness), format='pdf')
     matplotlib2tikz.save('figures/coherence_time_{}.tikz'.format(p_randomness))
     
-def plot_throughput_cdf(T, filename):
+def plot_throughput_cdf(T, filename, legend=True):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
     matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['legend.fontsize'] =  'smaller'
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
@@ -476,9 +521,13 @@ def plot_throughput_cdf(T, filename):
             style = '+-'
         else:
             style = '-'
-        ax.plot(bin_edges[1:], cdf, style, linewidth=2)
+        ax.plot(bin_edges[1:], cdf, style, linewidth=2, markevery=10)
+
+    plt.legend(labels, loc="best")
     
-    plt.legend(labels, loc="best")    
+    if not legend:
+        ax.get_legend().remove()
+    
     plt.grid('both', linestyle='dashed')
     ax.set_ylim(0, 1)
     plt.xlabel('Throughput [Mbps]')
@@ -494,6 +543,9 @@ def plot_throughput_pdf(T):
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
     matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['legend.fontsize'] =  'small'
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
@@ -532,6 +584,9 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
     matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['legend.fontsize'] =  'small'
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
@@ -874,7 +929,7 @@ misclass_error_values = []
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = [1e-3,3e-3,5e-3,7e-3,1e-2,3e-2,5e-2,7e-2,1e-1,3e-1,0.4,5e-1,7e-1] # np.arange(1,10,1)/10.
+X = [1e-3,5e-3,7e-3,1e-2,3e-2,5e-2,7e-2,1e-1,3e-1,0.4,5e-1,7e-1] # note we removed 3e-3.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
@@ -882,8 +937,7 @@ for r_t in X:
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
         _, mu = get_misclassification_error(y_test_proposed, y_pred_proposed, y_score_proposed)
-        #print('The misclassification error in the exploitation period is {:.6f}%.'.format(mu*100))
-#        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
+
         if (mu < min_score):
             min_score = mu
             min_r_training = r_t
@@ -929,8 +983,6 @@ benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (be
 # Handover requested, and granted.  Therefore, the target rate penalized but no gap
 benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # blind handover, the throughput is the target but no gap.
 benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # blind handover, the throughput is the target but no gap.
-
-
 ##
 
 ##############################################################################
@@ -970,15 +1022,13 @@ data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
 #plot_throughput_pdf(data)
 plot_throughput_cdf(data[['Sub-6 only', 'mmWave only']], 'throughput_cdf_{}'.format(p_randomness))
 
-diff = pd.DataFrame(data = (abs(data['mmWave only'] - data['Sub-6 only'])))
-plot_throughput_cdf(diff, 'diff_cdf_{}'.format(p_randomness))
+diff = pd.DataFrame(data = (abs(data['mmWave only'] - data['Sub-6 only'])), columns=['Difference'])
+plot_throughput_cdf(diff, 'diff_cdf_{}'.format(p_randomness), legend=False)
 
-# TODO
 # 3D Plot pdf/CDF
-#plot_joint_pdf(data['Sub-6 only'], data['mmWave only'])
-#plot_joint_cdf(data['Sub-6 only'], data['mmWave only'])
+plot_joint_pdf(data['Sub-6 only'], data['mmWave only'])
+plot_joint_cdf(data['Sub-6 only'], data['mmWave only'])
 
-data = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
-data.dropna(inplace=True)
-plot_throughput_cdf(data, 'throughputs_{}'.format(p_randomness))
-
+data_policies = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
+data_policies.dropna(inplace=True)
+plot_throughput_cdf(data_policies, 'throughputs_{}'.format(p_randomness))
