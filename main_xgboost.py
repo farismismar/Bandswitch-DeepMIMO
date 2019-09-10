@@ -22,6 +22,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as tick
 from matplotlib.ticker import MultipleLocator, FuncFormatter
 
+import matplotlib2tikz
+
 os.chdir('/Users/farismismar/Desktop/DeepMIMO')
 # 0) Some parameters
 seed = 0
