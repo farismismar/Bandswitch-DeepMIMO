@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Jun  4 16:08:03 2019
-
 @author: farismismar
 """
 
@@ -24,7 +23,6 @@ import matplotlib.ticker as tick
 from matplotlib.ticker import MultipleLocator, FuncFormatter
 
 os.chdir('/Users/farismismar/Desktop/DeepMIMO')
-
 # 0) Some parameters
 seed = 0
 K_fold = 2
@@ -36,13 +34,14 @@ p_blockage = 0.4
 p_randomness = 0 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.12 # [ 0.4300 0.8500 1.2700 1.7000 2.1200 2.5400]. 
-rate_threshold_mmWave= 1.5 #1.3
+rate_threshold_sub6 = 1.72 # median
+rate_threshold_mmWave = 7.00
 
-rate_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave
+training_request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr, but only for the training data.
+request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr
 
 # in ms
-gap_fraction = 0.6
+gap_fraction = 0.6 # rho
 
 # in Watts
 PTX_35 = 1 # in Watts for 3.5 GHz
@@ -56,7 +55,7 @@ delta_f_28 = 180e3 # Hz/PRB
 N_SC_35 = 1
 N_SC_28 = 1
 
-mmWave_BW_multiplier = 3 # x sub-6
+mmWave_BW_multiplier = 10 # x sub-6
 B_35 = N_SC_35 * delta_f_35
 B_28 = N_SC_28 * delta_f_28 * mmWave_BW_multiplier
 Nf = 7 # dB noise fig.
@@ -205,58 +204,274 @@ def _compute_bf_vector(f_c, theta, M_ULA):
     
     return f
 
+def get_misclassification_error(y_test, y_pred, y_score):
+    cm = confusion_matrix(y_test, y_pred)
+    tn, fp, fn, tp  = cm.ravel()
+    
+    mu = (fp + fn) / (fp + fn + tn + tp)
+    
+    return cm, mu
+
 def plot_confusion_matrix(y_test, y_pred, y_score):
     # Compute confusion matrix
-    classes = [0,1]
+   # classes = [0,1]
     class_names = ['Deny','Grant']
     normalize = False
     
-    cm = confusion_matrix(y_test, y_pred)
+    cm, _  = get_misclassification_error(y_test, y_pred, y_score)
     np.set_printoptions(precision=2)
     
     # Plot non-normalized confusion matrix
-    plt.figure(figsize=(8,5))
-    
+    fig = plt.figure(figsize=(10,9))
+    ax = fig.gca()
+    ax.set_xticks([-1,0,1])
+    ax.set_yticks([-1,0,1])
+
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 16
+    matplotlib.rcParams['font.size'] = 40
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
     
-    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
-    plt.colorbar()
-    tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, class_names, rotation=0)
-    plt.yticks(tick_marks, class_names)
-    
+    ax.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues, aspect='auto', origin='lower')
+
+    # label the ticks with the respective list entries
+    ax.set_xticklabels(['']+class_names)
+    ax.set_yticklabels(['']+class_names)
+
     fmt = '.2f' if normalize else 'd'
-    thresh = cm.max() / 2.
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, format(cm[i, j], fmt),
-                 horizontalalignment="center",
+    thresh = cm.max() / 1.5 if normalize else cm.max() / 2.
+    for i, j in itertools.product(np.arange(cm.shape[0]), np.arange(cm.shape[1])):
+        ax.text(x=j, y=i, s=format(cm[i, j], fmt),
+                 horizontalalignment="center", va='center',
                  color="white" if cm[i, j] > thresh else "black")
-    
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-    
+ 
+    plt.xlabel(r'\textbf{Predicted label}')
+    plt.ylabel(r'\textbf{True label}')
     plt.tight_layout()
     plt.savefig('figures/conf_matrix_{}.pdf'.format(p_randomness), format='pdf')
 
-def generate_roc(y_test, y_score):
-    fpr, tpr, _ = roc_curve(y_test, y_score)
 
-    roc_auc_score_value = roc_auc_score(y_test, y_score)
+def _parula_map():
+    # https://stackoverflow.com/questions/34859628/has-someone-made-the-parula-colormap-in-matplotlib
+    from matplotlib.colors import LinearSegmentedColormap
+    
+    cm_data = [[0.2081, 0.1663, 0.5292], [0.2116238095, 0.1897809524, 0.5776761905], 
+     [0.212252381, 0.2137714286, 0.6269714286], [0.2081, 0.2386, 0.6770857143], 
+     [0.1959047619, 0.2644571429, 0.7279], [0.1707285714, 0.2919380952, 
+      0.779247619], [0.1252714286, 0.3242428571, 0.8302714286], 
+     [0.0591333333, 0.3598333333, 0.8683333333], [0.0116952381, 0.3875095238, 
+      0.8819571429], [0.0059571429, 0.4086142857, 0.8828428571], 
+     [0.0165142857, 0.4266, 0.8786333333], [0.032852381, 0.4430428571, 
+      0.8719571429], [0.0498142857, 0.4585714286, 0.8640571429], 
+     [0.0629333333, 0.4736904762, 0.8554380952], [0.0722666667, 0.4886666667, 
+      0.8467], [0.0779428571, 0.5039857143, 0.8383714286], 
+     [0.079347619, 0.5200238095, 0.8311809524], [0.0749428571, 0.5375428571, 
+      0.8262714286], [0.0640571429, 0.5569857143, 0.8239571429], 
+     [0.0487714286, 0.5772238095, 0.8228285714], [0.0343428571, 0.5965809524, 
+      0.819852381], [0.0265, 0.6137, 0.8135], [0.0238904762, 0.6286619048, 
+      0.8037619048], [0.0230904762, 0.6417857143, 0.7912666667], 
+     [0.0227714286, 0.6534857143, 0.7767571429], [0.0266619048, 0.6641952381, 
+      0.7607190476], [0.0383714286, 0.6742714286, 0.743552381], 
+     [0.0589714286, 0.6837571429, 0.7253857143], 
+     [0.0843, 0.6928333333, 0.7061666667], [0.1132952381, 0.7015, 0.6858571429], 
+     [0.1452714286, 0.7097571429, 0.6646285714], [0.1801333333, 0.7176571429, 
+      0.6424333333], [0.2178285714, 0.7250428571, 0.6192619048], 
+     [0.2586428571, 0.7317142857, 0.5954285714], [0.3021714286, 0.7376047619, 
+      0.5711857143], [0.3481666667, 0.7424333333, 0.5472666667], 
+     [0.3952571429, 0.7459, 0.5244428571], [0.4420095238, 0.7480809524, 
+      0.5033142857], [0.4871238095, 0.7490619048, 0.4839761905], 
+     [0.5300285714, 0.7491142857, 0.4661142857], [0.5708571429, 0.7485190476, 
+      0.4493904762], [0.609852381, 0.7473142857, 0.4336857143], 
+     [0.6473, 0.7456, 0.4188], [0.6834190476, 0.7434761905, 0.4044333333], 
+     [0.7184095238, 0.7411333333, 0.3904761905], 
+     [0.7524857143, 0.7384, 0.3768142857], [0.7858428571, 0.7355666667, 
+      0.3632714286], [0.8185047619, 0.7327333333, 0.3497904762], 
+     [0.8506571429, 0.7299, 0.3360285714], [0.8824333333, 0.7274333333, 0.3217], 
+     [0.9139333333, 0.7257857143, 0.3062761905], [0.9449571429, 0.7261142857, 
+      0.2886428571], [0.9738952381, 0.7313952381, 0.266647619], 
+     [0.9937714286, 0.7454571429, 0.240347619], [0.9990428571, 0.7653142857, 
+      0.2164142857], [0.9955333333, 0.7860571429, 0.196652381], 
+     [0.988, 0.8066, 0.1793666667], [0.9788571429, 0.8271428571, 0.1633142857], 
+     [0.9697, 0.8481380952, 0.147452381], [0.9625857143, 0.8705142857, 0.1309], 
+     [0.9588714286, 0.8949, 0.1132428571], [0.9598238095, 0.9218333333, 
+      0.0948380952], [0.9661, 0.9514428571, 0.0755333333], 
+     [0.9763, 0.9831, 0.0538]]
+    
+    parula_map = LinearSegmentedColormap.from_list('parula', cm_data)
+    
+    return parula_map
 
-    return fpr, tpr, roc_auc_score_value 
-
-def plot_throughput_cdf(T):
+def plot_joint_pdf(X, Y):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['font.size'] = 30
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['text.latex.preamble'] = [
+        r'\usepackage{amsmath}',
+        r'\usepackage{amssymb}']   
+    
+    num_bins = 50
+    H, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
+    for y in np.arange(num_bins):
+        H[y,:] = H[y,:] / sum(H[y,:])
+    pdf = H / num_bins    
+    
+    ax = plt.gca(projection="3d")
+    
+    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
+
+    surf = ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], pdf[:num_bins, :num_bins], cmap=_parula_map(), antialiased=True)
+    #cb = fig.colorbar(surf, shrink=0.5)
+    ax.view_init(5, 45) # the first param rotates the z axis inwards or outwards the screen.  The second is our guy.
+    
+    # No background color    
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+    
+    # Now set color to white (or whatever is "invisible")
+    ax.xaxis.pane.set_edgecolor('w')
+    ax.yaxis.pane.set_edgecolor('w')
+    ax.zaxis.pane.set_edgecolor('w')
+
+    ax.set_xlabel('3.5 GHz')
+    ax.set_ylabel('28 GHz')
+    ax.set_zlabel('Joint Throughput pdf')
+
+    ax.invert_xaxis()
+    ax.invert_yaxis()
+        
+    ax.set_xlim(int(np.max(X)), 0)
+    ax.set_ylim(int(np.max(Y)), 0)
+    ax.set_zlim(np.min(pdf), np.max(pdf))
+        
+    ax.xaxis.labelpad=20
+    ax.yaxis.labelpad=20
+    ax.zaxis.labelpad=20
+    
+    plt.xticks([3,2,1,0])
+    plt.yticks([15,10,5,0])
+        
+    plt.tight_layout()
+    
+    plt.savefig('figures/joint_throughput_pdf_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/joint_throughput_pdf_{}.tikz'.format(p_randomness))
+
+def plot_joint_cdf(X, Y):
+    fig = plt.figure(figsize=(10.24, 7.68))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['font.size'] = 30
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['text.latex.preamble'] = [
+        r'\usepackage{amsmath}',
+        r'\usepackage{amssymb}']   
+    
+    num_bins = 100
+    H, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
+    for y in np.arange(num_bins):
+        H[y,:] = H[y,:] / sum(H[y,:])
+    pdf = H / num_bins
+    
+    cdf = np.zeros((num_bins, num_bins))
+    for i in np.arange(num_bins):
+        for j in np.arange(num_bins):
+            cdf[i,j] = sum(sum(pdf[:(i+1), :(j+1)]))
+
+    ax = plt.gca(projection="3d")
+    x, y = np.meshgrid(X_bin_edges, Y_bin_edges)
+
+    surf = ax.plot_surface(x[:num_bins, :num_bins], y[:num_bins, :num_bins], cdf[:num_bins, :num_bins], cmap=_parula_map(), antialiased=True)
+#    cb = fig.colorbar(surf, shrink=0.5)
+    ax.view_init(5, 45) # the first param rotates the z axis inwards or outwards the screen.  The second is our guy.
+    
+    # No background color    
+    ax.xaxis.pane.fill = False
+    ax.yaxis.pane.fill = False
+    ax.zaxis.pane.fill = False
+    
+    # Now set color to white (or whatever is "invisible")
+    ax.xaxis.pane.set_edgecolor('w')
+    ax.yaxis.pane.set_edgecolor('w')
+    ax.zaxis.pane.set_edgecolor('w')
+
+    ax.set_xlabel('3.5 GHz')
+    ax.set_ylabel('28 GHz')
+    ax.set_zlabel('Joint Throughput CDF')
+    
+    ax.invert_xaxis()
+    ax.invert_yaxis()
+    
+    ax.set_xlim(int(np.max(X)), 0)
+    ax.set_ylim(int(np.max(Y)), 0)
+    ax.set_zlim(0,1)
+
+    ax.xaxis.labelpad=20
+    ax.yaxis.labelpad=20
+    ax.zaxis.labelpad=20
+
+    plt.xticks([3,2,1,0])
+    plt.yticks([15,10,5,0])
+    
+    plt.tight_layout()
+    
+    plt.savefig('figures/joint_throughput_cdf_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/joint_throughput_cdf_{}.tikz'.format(p_randomness))
+
+def plot_pdf(data1, label1, data2, label2):
+    fig = plt.figure(figsize=(10.24, 7.68))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['legend.fontsize'] =  'small'
+    matplotlib.rcParams['text.latex.preamble'] = [
+        r'\usepackage{amsmath}',
+        r'\usepackage{amssymb}']   
+    
+    labels = [label1, label2]
+
+    num_bins = 50
+    counts, bin_edges = np.histogram(data1, bins=num_bins, density=True)
+    pdf = counts #np.cumsum(counts) / counts.sum()
+
+    lw = 2    
+    plt.xlabel('Coherence time (ms)')
+    plt.grid(True, axis='both', which='both')
+    ax = fig.gca()
+    plot1, = ax.plot(bin_edges[1:], pdf, linewidth=lw)
+    ax.set_ylabel('sub-6 Coherence time pdf')
+    
+    counts, bin_edges = np.histogram(data2, bins=num_bins, density=True)
+    pdf = counts #np.cumsum(counts) / counts.sum()
+    ax_sec = ax.twinx()
+    plot2, = ax_sec.plot(bin_edges[1:], pdf, color='red', linewidth=lw)
+    
+    plt.legend([plot1, plot2], labels, loc="best")
+    ax_sec.set_ylabel('mmWave Coherence time pdf')
+    plt.tight_layout()
+    plt.savefig('figures/coherence_time_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/coherence_time_{}.tikz'.format(p_randomness))
+    
+def plot_throughput_cdf(T, filename, legend=True):
+    fig = plt.figure(figsize=(10.24, 7.68))
+    plt.rc('text', usetex=True)
+    plt.rc('font', family='serif')
+    matplotlib.rcParams['text.usetex'] = True
+    matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['legend.fontsize'] =  'smaller'
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
@@ -264,36 +479,49 @@ def plot_throughput_cdf(T):
     labels = T.columns
 
     num_bins = 50
-    i = 0
+
     for data in T:
         data_ = T[data]
 
         counts, bin_edges = np.histogram(data_, bins=num_bins, density=True)
         cdf = np.cumsum(counts) / counts.sum()
-        lw = 1 + 0.2*i
-        i += 1
         ax = fig.gca()
-        if data == 'Optimal':
-            style = '--'
+        if data == 'mmWave only':
+            style = 'r-'
+        elif data == 'Sub-6 only':
+            style = 'b-'
+        elif data == 'Optimal':
+            style = '^--'
         elif data == 'Proposed':
 #            lw = 3.5
             style = '+-'
         else:
             style = '-'
-        ax.plot(bin_edges[1:], cdf, style, linewidth=lw)
+        ax.plot(bin_edges[1:], cdf, style, linewidth=2, markevery=10)
+
+    plt.legend(labels, loc="best")
     
-    plt.legend(labels, loc="best")    
-    plt.grid()
-    plt.xlabel('Throughput (Mbps)')
+    if not legend:
+        ax.get_legend().remove()
+    
+    plt.grid('both', linestyle='dashed')
+    ax.set_ylim(0, 1)
+    plt.xlabel('Throughput [Mbps]')
     plt.ylabel('Throughput CDF')
-    plt.savefig('figures/throughputs_{}.pdf'.format(p_randomness), format='pdf')
+    plt.tight_layout()    
+    
+    plt.savefig('figures/{}.pdf'.format(filename), format='pdf')
+    matplotlib2tikz.save('figures/{}.tikz'.format(filename))
 
 def plot_throughput_pdf(T):
     fig = plt.figure(figsize=(10.24, 7.68))
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['legend.fontsize'] =  'small'
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
@@ -319,9 +547,11 @@ def plot_throughput_pdf(T):
     
     plt.legend(labels, loc="best")    
     plt.grid()
-    plt.xlabel('Throughput (Mbps)')
+    plt.xlabel('Throughput [Mbps]')
     plt.ylabel('Throughput pdf')
+    plt.tight_layout()
     plt.savefig('figures/throughputs_pdf_{}.pdf'.format(p_randomness), format='pdf')
+    matplotlib2tikz.save('figures/throughputs_pdf_{}.tikz'.format(p_randomness))
     
 def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     fig = plt.figure(figsize=(10.24,7.68))
@@ -329,7 +559,10 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     plt.rc('text', usetex=True)
     plt.rc('font', family='serif')
     matplotlib.rcParams['text.usetex'] = True
-    matplotlib.rcParams['font.size'] = 20
+    matplotlib.rcParams['font.size'] = 40
+    matplotlib.rcParams['xtick.labelsize'] = 'small'
+    matplotlib.rcParams['ytick.labelsize'] = 'small'
+    matplotlib.rcParams['legend.fontsize'] =  'small'
     matplotlib.rcParams['text.latex.preamble'] = [
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']
@@ -345,8 +578,10 @@ def plot_primary(X,Y, title, xlabel, ylabel, filename='plot.pdf'):
     
     plt.grid(True)
     fig.tight_layout()
-    plt.savefig('figures/plot_{0}{1}'.format(p_randomness, filename), format='pdf')
-    plt.show()
+    plt.savefig('figures/plot_{0}{1}.pdf'.format(p_randomness, filename), format='pdf')
+    matplotlib2tikz.save('figures/plot_{0}{1}.tikz'.format(p_randomness, filename))
+    
+#    plt.show()
 
 ##############################################################################
 def train_classifier(df, r_training=0.8):
@@ -444,17 +679,17 @@ def get_coherence_time(df, My, freq):
     T_beam = np.percentile(T_beam, 1) # take the 1st percentile of coherence
     
     if freq >= 28e9:
-        print('INFO: mmWave channel coherence time is {} ms'.format(T_beam))
+        print('INFO: mmWave mean channel coherence time is {} ms'.format(T_beam.mean()))
         return T_beam        
   
-    T_ofdm = c / (freq * v_s * 1000/3600) * 1e3 # in ms
+    T_ofdm = np.ones(n) * c / (freq * v_s * 1000/3600) * 1e3 # in ms
 
-    T = min(T_ofdm, T_beam)
+    T = np.minimum(T_ofdm, T_beam)
 
-    print('INFO: sub-6 channel coherence time is {} ms'.format(T))
+    print('INFO: sub-6 mean channel coherence time is {} ms'.format(T.mean()))
     return T
 
-#df_ = create_dataset() # only uncomment for the first run, when the channel consideration changed.
+#df_ = create_dataset() # only uncomment for the first run, when the channel consideration changes.  Otherwise, no need.
 df_ = pd.read_csv('dataset.csv')
 
 df = df_.iloc[:max_users,:]
@@ -467,12 +702,15 @@ noise_floor_28 = k_B * T * delta_f_28 * mmWave_BW_multiplier * 1e3 # in mW
 noise_power_35 = 10 ** (Nf/10.) * noise_floor_35
 noise_power_28 = 10 ** (Nf/10.) * noise_floor_28 
 
+# Instantaneous rates (Shannon)
 df['Capacity_35'] = B_35*np.log2(1 + 10**(df['P_RX_35']/10.) / noise_power_35) / 1e6
 df['Capacity_28'] = B_28*np.log2(1 + 10**(df['P_RX_28']/10.) / noise_power_28) / 1e6
 
 df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28']]
 
 user_mask = np.random.binomial(1, p_randomness, size=max_users) # 0 == user is 3.5, 1 == user is mmWave.
+
+# Source and Target are instantaneous rates.
 df.loc[user_mask==0, 'Source'] = df.loc[user_mask==0, 'Capacity_35']
 df.loc[user_mask==1, 'Source'] = df.loc[user_mask==1, 'Capacity_28']
 df.loc[user_mask==0, 'Target'] = df.loc[user_mask==0, 'Capacity_28']
@@ -481,6 +719,10 @@ df.loc[user_mask==1, 'Target'] = df.loc[user_mask==1, 'Capacity_35']
 # Compute the Effective Achievable Rates
 coherence_time_sub6 = get_coherence_time(df, My=8, freq=3.5e9)
 coherence_time_mmWave = get_coherence_time(df, My=64, freq=28e9) 
+
+#plot_pdf(coherence_time_mmWave, 'mmWave', coherence_time_sub6, 'sub-6')
+coherence_time_mmWave = np.percentile(coherence_time_mmWave, 1)
+coherence_time_sub6 = np.mean(coherence_time_sub6)
 
 gap_duration_sub6 = gap_fraction * coherence_time_sub6
 gap_duration_mmWave  = gap_fraction * coherence_time_mmWave
@@ -505,11 +747,8 @@ exploit_indices = np.random.choice(df.shape[0], N_exploit, replace=False)
 sub_6_capacities = df.loc[exploit_indices, 'Capacity_35'].copy()
 mmWave_capacities = df.loc[exploit_indices, 'Capacity_28'].copy()
 
-# Handover is based on raw Shannon rates.
-df['y'] = pd.DataFrame((df.loc[:,'Source'] < rate_threshold) & (df.loc[:,'Target'] >= df.loc[:,'Source']), dtype=int) 
-
 # Change the order of columns to put 
-column_order = ['lon', 'lat', 'height', 'Source', 'Target', 'Source_is_3.5', 'Source_is_28', 'y']
+column_order = ['lon', 'lat', 'height', 'Source', 'Target', 'Source_is_3.5', 'Source_is_28']
 df = df[column_order]
 
 ##############################################################################
@@ -543,13 +782,27 @@ del df_optimal, a, b, d, df_optimal_
 ##############################################################################
 df_legacy = df.copy()
 
+# Handover is based on raw Shannon rates.
+df_legacy.loc[:, 'HO_requested'] = (df_legacy.loc[:, 'Source'] < request_handover_threshold) + 0
+df_legacy.loc[:, 'y'] = (df_legacy.loc[:,'Target'] >= df_legacy.loc[:,'Source']) + 0
+
+# No handover request means no handover granted
+df_legacy.loc[df_legacy['HO_requested'] == 0, 'y'] = 0
+
 # Now, apply the handover algorithm
 # and compute the Effective Achievable Rate
-df_legacy.loc[(df_legacy['y'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 0)  & (df_legacy['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
-df_legacy.loc[(df_legacy['y'] == 0) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 0)  & (df_legacy['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
 
-df_legacy.loc[(df_legacy['y'] == 1) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 1)  & (df_legacy['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_ho # Handover takes place at the beginning of the frame and is penalized for the gap.
-df_legacy.loc[(df_legacy['y'] == 1) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['y'] == 1)  & (df_legacy['Source_is_28'] == 1), 'Target'] * coeff_mmWave_ho # Handover takes place at the beginning of the frame and is penalized for the gap.
+# Based on x_hr, if there was no handover, put the source effective rates back
+df_legacy.loc[(df_legacy['HO_requested'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover requested.
+df_legacy.loc[(df_legacy['HO_requested'] == 0) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 0) & (df_legacy['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover requested.
+
+# Handover requested, but denied.  Therefore, the source rate penalized by the gap
+df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 0) & (df_legacy['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_ho # handover requested but denied, the throughput is the source.
+df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 0) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 0) & (df_legacy['Source_is_28'] == 1), 'Source'] * coeff_mmWave_ho # handover requested but denied, the throughput is the source.
+
+# Handover requested, and granted.  Therefore, the target rate penalized by the gap
+df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 1) & (df_legacy['Source_is_3.5'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 1) & (df_legacy['Source_is_3.5'] == 1), 'Target'] * coeff_sub6_ho # handover requested and granted, the throughput is the target.
+df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 1) & (df_legacy['Source_is_28'] == 1), 'Capacity_Legacy'] = df_legacy.loc[(df_legacy['HO_requested'] == 1) & (df_legacy['y'] == 1) & (df_legacy['Source_is_28'] == 1), 'Target'] * coeff_mmWave_ho # handover requested and granted, the throughput is the target.
 ##
 
 # Sample r_exploit data randomly from df_legacy
@@ -562,15 +815,29 @@ del df_legacy
 ##############################################################################
 df_blind = df.copy()
 
-df_blind['y'] = pd.DataFrame((df_blind.loc[:,'Source'] <= rate_threshold), dtype=int)
+df_blind['HO_requested'] = pd.DataFrame((df_blind.loc[:,'Source'] <= request_handover_threshold), dtype=int)
+df_blind['y'] = 1
+
+# No handover request means no handover granted
+df_blind.loc[df_blind['HO_requested'] == 0, 'y'] = 0
 
 # Now, apply the handover algorithm
 # and compute the Effective Achievable Rate
-df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
-df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
+#df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
+#df_blind.loc[(df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 0)  & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
 
-df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
-df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
+# Based on x_hr, if there was no handover, put the source effective rates back
+df_blind.loc[(df_blind['HO_requested'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source but no gap.
+df_blind.loc[(df_blind['HO_requested'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 0) & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source but no gap.
+
+# Handover requested, but denied.  Therefore, the source rate penalized but no gap
+df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 0) & (df_blind['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source but no gap.
+df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 0) & (df_blind['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source but no gap.
+
+# Handover requested, and granted.  Therefore, the target rate penalized but no gap
+df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 1) & (df_blind['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # blind handover, the throughput is the target but no gap.
+df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Capacity_Blind'] = df_blind.loc[(df_blind['HO_requested'] == 1) & (df_blind['y'] == 1) & (df_blind['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # blind handover, the throughput is the target but no gap.
+
 ##
 
 # Sample r_exploit data randomly from df_blind
@@ -586,11 +853,20 @@ del df_blind
 height = df['height']
 df_proposed = df.drop(['height', 'Source_is_28'], axis=1) # delete the 28 column since it is equal to not 3.5.
 
+df_proposed.loc[:, 'HO_requested'] = (df_proposed.loc[:, 'Source'] < request_handover_threshold) + 0
+df_proposed.loc[:, 'y'] = (df_proposed.loc[:,'Target'] >= df_proposed.loc[:,'Source']) + 0
+
+# No handover request means no handover granted
+df_proposed.loc[df_proposed['HO_requested'] == 0, 'y'] = 0
+
 if (p_randomness == 0 or p_randomness == 1):
     df_proposed = df_proposed.drop(['Source_is_3.5'], axis=1) # these two values will make the column of a single value.
 
 # Use this for the exploitation
 train_valid, benchmark_data_proposed = train_test_split(df_proposed, test_size=r_exploitation, random_state=seed)
+
+# The training and validation data get the infinity threshold (always request).
+train_valid['HO_requested'] = 1
 
 train_indices = pd.Int64Index(np.arange(df.shape[0])).difference(exploit_indices)
 train_valid = df_proposed.iloc[train_indices, :]
@@ -598,42 +874,46 @@ train_valid = df_proposed.iloc[train_indices, :]
 benchmark_data_proposed = df_proposed.iloc[exploit_indices, :]
 
 roc_graphs = pd.DataFrame()
-roc_auc_values = []
+misclass_graphs = pd.DataFrame()
 
-# Change r_training and save roc1 then repeat
+roc_auc_values = []
+misclass_error_values = []
+
 min_r_training = 1
 min_score = np.inf
 best_clf = None
-X = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3] # np.arange(1,10,1)/10.
+X = [1e-3,5e-3,7e-3,1e-2,3e-2,5e-2,7e-2,1e-1,3e-1,0.4,5e-1,7e-1] # note we removed 3e-3.
 for r_t in X:
     try:
         [y_pred, y_score, clf] = train_classifier(train_valid, r_t)
         y_pred_proposed, score = predict_handover(benchmark_data_proposed, clf, r_t)
         y_score_proposed = clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
         y_test_proposed = benchmark_data_proposed['y']
+        _, mu = get_misclassification_error(y_test_proposed, y_pred_proposed, y_score_proposed)
 
-#        fpr, tpr, score = generate_roc(y_test_proposed, y_score_proposed[:,1])
-        if (score < min_score):
-            min_score = score
+        if (mu < min_score):
+            min_score = mu
             min_r_training = r_t
             best_clf = clf
             
         roc_auc_values.append(score)
+        misclass_error_values.append(mu)
         
         roc_graphs = pd.concat([roc_graphs, pd.DataFrame(roc_auc_values)], axis=1)
+        misclass_graphs = pd.concat([misclass_graphs, pd.DataFrame(misclass_error_values)], axis=1)
+        
     except:
         roc_auc_values.append(np.nan)
+        misclass_error_values.append(np.nan)
         pass
 
 roc_graphs.to_csv('figures/roc_output_{}.csv'.format(p_randomness), index=False)
-plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
+misclass_graphs.to_csv('figures/misclass_output_{}.csv'.format(p_randomness), index=False)
 
 # Now generate data with the best classifier.
 y_pred_proposed, _ = predict_handover(benchmark_data_proposed, best_clf, min_r_training)
 y_score_proposed = best_clf.predict_proba(benchmark_data_proposed.drop(['y'], axis=1))
 y_test_proposed = benchmark_data_proposed['y']
-
-plot_confusion_matrix(y_test_proposed, y_pred_proposed, y_score_proposed)
 
 # Put back the height column
 benchmark_data_proposed['height'] = height
@@ -644,34 +924,64 @@ benchmark_data_proposed['Source_is_28'] = df.loc[benchmark_data_proposed.index, 
 
 # Penalize the throughput rates aka Effective Achievable Rate
 # Use the same formula as the blind formula
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source.
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 0)  & (benchmark_data_proposed['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source.
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # handover, the throughput is the target but no gap.
-benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # handover, the throughput is the target but no gap.
+
+# Based on x_hr, if there was no handover, put the source effective rates back
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source but no gap.
+
+# Handover requested, but denied.  Therefore, the source rate penalized but no gap
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Source'] * coeff_sub6_no_ho # no handover, the throughput is the source but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 0) & (benchmark_data_proposed['Source_is_28'] == 1), 'Source'] * coeff_mmWave_no_ho # no handover, the throughput is the source but no gap.
+
+# Handover requested, and granted.  Therefore, the target rate penalized but no gap
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_3.5'] == 1), 'Target'] * coeff_mmWave_no_ho # blind handover, the throughput is the target but no gap.
+benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Capacity_Proposed'] = benchmark_data_proposed.loc[(benchmark_data_proposed['HO_requested'] == 1) & (benchmark_data_proposed['y'] == 1) & (benchmark_data_proposed['Source_is_28'] == 1), 'Target'] * coeff_sub6_no_ho # blind handover, the throughput is the target but no gap.
 ##
 
 ##############################################################################
 # Plotting
 ##############################################################################
 
+plot_primary(X, roc_auc_values, 'ROC vs Training', r'$r_\text{training}$', 'ROC AUC', filename='roc_vs_training_{}.pdf'.format(p_randomness))
+plot_primary(X, 100*np.array(misclass_error_values), '$\mu vs Training', r'$r_\text{training}$', r'$\mu$ [\%]', filename='misclass_vs_training_{}.pdf'.format(p_randomness))
+plot_confusion_matrix(y_test_proposed, y_pred_proposed, y_score_proposed)
+
 # Put the coherence time penalty for no handover regardess
 sub_6_capacities.iloc[:] *= coeff_sub6_no_ho
 mmWave_capacities.iloc[:] *= coeff_mmWave_no_ho
 
 benchmark_data_optimal = benchmark_data_optimal.reset_index().drop(['index'], axis=1)
-benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], axis=1)
 benchmark_data_legacy  = benchmark_data_legacy.reset_index().drop(['index'], axis=1)
 benchmark_data_blind = benchmark_data_blind.reset_index().drop(['index'], axis=1)
 benchmark_data_proposed = benchmark_data_proposed.reset_index().drop(['index'], axis=1)
 sub_6_capacities = sub_6_capacities.reset_index().drop(['index'], axis=1)
 mmWave_capacities = mmWave_capacities.reset_index().drop(['index'], axis=1)
 
-data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
-data.columns = ['Optimal', 'Proposed', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
+benchmark_data_proposed.loc[:,'y_true'] = benchmark_data_proposed['y'].copy()
+benchmark_data_proposed['y'] = y_pred_proposed
+
+# Summaries
+f = open('figures/handover_metrics_{}.txt'.format(p_randomness), 'w')
+for policy in ['proposed', 'legacy', 'blind']:
+    d_ = eval('benchmark_data_{}'.format(policy))
+    f.write('Policy {0} -- number of handovers requested in exploitation phase: {1:.0f}\n'.format(policy, d_['HO_requested'].sum()))
+    f.write('Policy {0} -- number of handovers granted in exploitation phase: {1:.0f}\n'.format(policy, d_['y'].sum()))
+f.close()
+    
+data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_proposed['HO_requested'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
+data.columns = ['Optimal', 'Proposed', 'HO_requested', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
 data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
 
-plot_throughput_pdf(data)
+#plot_throughput_pdf(data)
+plot_throughput_cdf(data[['Sub-6 only', 'mmWave only']], 'throughput_cdf_{}'.format(p_randomness))
 
-data = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
-data.dropna(inplace=True)
-plot_throughput_cdf(data)
+diff = pd.DataFrame(data = (abs(data['mmWave only'] - data['Sub-6 only'])), columns=['Difference'])
+plot_throughput_cdf(diff, 'diff_cdf_{}'.format(p_randomness), legend=False)
+
+# 3D Plot pdf/CDF
+plot_joint_pdf(data['Sub-6 only'], data['mmWave only'])
+plot_joint_cdf(data['Sub-6 only'], data['mmWave only'])
+
+data_policies = data[['Optimal', 'Proposed', 'Legacy', 'Blind']]
+data_policies.dropna(inplace=True)
+plot_throughput_cdf(data_policies, 'throughputs_{}'.format(p_randomness))

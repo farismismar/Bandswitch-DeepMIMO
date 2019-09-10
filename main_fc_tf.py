@@ -58,7 +58,7 @@ p_randomness = 0.3 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 1.72 # median
-rate_threshold_mmWave = 7.00 #12.5 
+rate_threshold_mmWave = 7.00
 
 training_request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr, but only for the training data.
 request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr
@@ -399,7 +399,7 @@ def plot_joint_cdf(X, Y):
         r'\usepackage{amsmath}',
         r'\usepackage{amssymb}']   
     
-    num_bins = 50
+    num_bins = 100
     H, X_bin_edges, Y_bin_edges = np.histogram2d(X, Y, bins=(num_bins, num_bins), normed=True)
     for y in np.arange(num_bins):
         H[y,:] = H[y,:] / sum(H[y,:])
