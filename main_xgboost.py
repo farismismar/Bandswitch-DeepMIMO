@@ -43,7 +43,7 @@ p_blockage = 0.4
 p_randomness = 0.3 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 1.72 # median
+rate_threshold_sub6 = 1.69 # median
 rate_threshold_mmWave = 7.00
 
 training_request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr, but only for the training data.
