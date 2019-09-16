@@ -54,7 +54,7 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 0.3 # 0 = all users start in 3.5
+p_randomness = 1 # 0 = all users start in 3.5
 
 # in Mbps
 rate_threshold_sub6 = 1.72 # median
@@ -67,7 +67,7 @@ request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_random
 gap_fraction = 0.6 # rho
 
 # in Watts
-PTX_35 = 1 # in Watts for 3.5 GHz
+PTX_35 = 2 # in Watts for 3.5 GHz
 PTX_28 = 1 # in Watts for 28 GHz
 
 # speed:
