@@ -54,10 +54,10 @@ max_users = 54481
 r_exploitation = 0.8
 p_blockage = 0.4
 
-p_randomness = 1 # 0 = all users start in 3.5
+p_randomness = 0.3 # 0 = all users start in 3.5
 
 # in Mbps
-rate_threshold_sub6 = 2.12 # median
+rate_threshold_sub6 = 1.72 # median
 rate_threshold_mmWave = 7.00
 
 training_request_handover_threshold = np.inf #(1 - p_randomness) * rate_threshold_sub6 + p_randomness * rate_threshold_mmWave  # this is x_hr, but only for the training data.
@@ -67,7 +67,7 @@ request_handover_threshold = (1 - p_randomness) * rate_threshold_sub6 + p_random
 gap_fraction = 0.6 # rho
 
 # in Watts
-PTX_35 = 5 # in Watts for 3.5 GHz
+PTX_35 = 1 # in Watts for 3.5 GHz
 PTX_28 = 1 # in Watts for 28 GHz
 
 # speed:
@@ -729,8 +729,9 @@ def get_coherence_time(df, My, freq):
         print('INFO: mmWave mean channel coherence time is {} ms'.format(T_beam.mean()))
         return T_beam        
   
-    T_ofdm = np.ones(n) * c / (freq * v_s * 1000/3600) * 1e3 # in ms
-
+    T_ofdm = np.ones(n) * c / (freq * v_s * np.sin(alpha) * 1000/3600) * 1e3 # in ms
+    T_ofdm = np.percentile(T_ofdm, 1) 
+    
     T = np.minimum(T_ofdm, T_beam)
 
     print('INFO: sub-6 mean channel coherence time is {} ms'.format(T.mean()))
