@@ -1,0 +1,6 @@
+Policy proposed -- number of handovers requested in exploitation phase: 43529
+Policy proposed -- number of handovers granted in exploitation phase: 10978
+Policy legacy -- number of handovers requested in exploitation phase: 43529
+Policy legacy -- number of handovers granted in exploitation phase: 10999
+Policy blind -- number of handovers requested in exploitation phase: 43529
+Policy blind -- number of handovers granted in exploitation phase: 43529

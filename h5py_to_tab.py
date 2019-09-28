@@ -15,7 +15,7 @@ import itertools
 # This implements DeepMIMO_dataset{0,0}.user{0}.channel
 os.chdir('/Users/farismismar/Desktop/DeepMIMO')
 
-f = h5py.File('./DeepMIMO_Dataset_Generation v1.1/DeepMIMO Dataset/3.5GHz-DeepMIMO_dataset.mat', 'r')
+f = h5py.File('./DeepMIMO_Dataset_Generation v1.1/DeepMIMO Dataset/28_GHz_no_block_DeepMIMO_dataset.mat', 'r')
 
 # Best practice
 # Finds out the keys in the dataset.
@@ -60,4 +60,4 @@ df.iloc[:,0] = df.iloc[:,0].astype(int) # id
 df.iloc[:,-3:] = df.iloc[:,-3:].astype(float) # (x,y,z)
 
 # 6) Write back to csv
-df.to_csv('dataset.csv', index = False)
+df.to_csv('dataset/dataset_28_GHz.csv', index=False)

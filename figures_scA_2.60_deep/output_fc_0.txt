@@ -1,0 +1,14 @@
+r_exploitation 0.8, r_training 0.001, ROC 0.858840
+r_exploitation 0.8, r_training 0.003, ROC 0.843426
+r_exploitation 0.8, r_training 0.005, ROC 0.859953
+r_exploitation 0.8, r_training 0.007, ROC 0.889763
+r_exploitation 0.8, r_training 0.01, ROC 0.899814
+r_exploitation 0.8, r_training 0.03, ROC 0.998252
+r_exploitation 0.8, r_training 0.05, ROC 0.998962
+r_exploitation 0.8, r_training 0.07, ROC 0.999406
+r_exploitation 0.8, r_training 0.1, ROC 0.999901
+r_exploitation 0.8, r_training 0.3, ROC 0.999673
+r_exploitation 0.8, r_training 0.4, ROC 0.999699
+r_exploitation 0.8, r_training 0.5, ROC 0.999873
+r_exploitation 0.8, r_training 0.7, ROC 0.999951
+r_exploitation 0.8, r_training 0.7, ROC 0.999951

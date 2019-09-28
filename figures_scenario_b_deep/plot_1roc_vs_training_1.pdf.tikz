@@ -1,0 +1,50 @@
+% This file was created by matplotlib2tikz v0.6.18.
+\begin{tikzpicture}
+
+\begin{axis}[
+tick align=outside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+xlabel={$r_\text{training}$},
+xmajorgrids,
+xmin=-0.03395, xmax=0.73495,
+xtick={-0.2,0,0.2,0.4,0.6,0.8},
+xticklabels={$-0.2$,$0.0$,$0.2$,$0.4$,$0.6$,$0.8$},
+y grid style={white!69.01960784313725!black},
+ylabel={ROC AUC},
+ymajorgrids,
+ymin=0.442141113649395, ymax=1.02652468459725,
+ytick={0.4,0.6,0.8,1,1.2},
+yticklabels={$0.4$,$0.6$,$0.8$,$1.0$,$1.2$}
+]
+\addplot [semithick, black, mark=triangle*, mark size=3, mark options={solid}, forget plot]
+table [row sep=\\]{%
+0.001	0.649119156417747 \\
+0.003	0.468704003237934 \\
+0.005	0.849878869981765 \\
+0.007	0.895561895668211 \\
+0.01	0.892072488821718 \\
+0.03	0.999121664046851 \\
+0.05	0.996967448522876 \\
+0.07	0.999302153729709 \\
+0.1	0.99995617081058 \\
+0.3	0.999774603086772 \\
+0.4	0.999766775450934 \\
+0.5	0.999809835804948 \\
+0.7	0.999961795008714 \\
+};
+\path [draw=black, fill opacity=0] (axis cs:0,0.442141113649395)
+--(axis cs:0,1.02652468459725);
+
+\path [draw=black, fill opacity=0] (axis cs:1,0.442141113649395)
+--(axis cs:1,1.02652468459725);
+
+\path [draw=black, fill opacity=0] (axis cs:-0.03395,0)
+--(axis cs:0.73495,0);
+
+\path [draw=black, fill opacity=0] (axis cs:-0.03395,1)
+--(axis cs:0.73495,1);
+
+\end{axis}
+
+\end{tikzpicture}

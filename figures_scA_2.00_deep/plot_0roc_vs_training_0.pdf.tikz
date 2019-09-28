@@ -1,0 +1,38 @@
+% This file was created by matplotlib2tikz v0.6.18.
+\begin{tikzpicture}
+
+\begin{axis}[
+tick align=outside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+xlabel={$r_\text{training}$},
+xmajorgrids,
+xmin=0.0945, xmax=0.1055,
+xtick={0.09,0.095,0.1,0.105,0.11},
+xticklabels={$0.090$,$0.095$,$0.100$,$0.105$,$0.110$},
+y grid style={white!69.01960784313725!black},
+ylabel={ROC AUC},
+ymajorgrids,
+ymin=0.944781676781557, ymax=1.05475626349687,
+ytick={0.9,0.95,1,1.05,1.1},
+yticklabels={$0.90$,$0.95$,$1.00$,$1.05$,$1.10$}
+]
+\addplot [semithick, black, mark=triangle*, mark size=3, mark options={solid}, forget plot]
+table [row sep=\\]{%
+0.1	0.999768970139214 \\
+};
+\path [draw=black, fill opacity=0] (axis cs:0,0.944781676781557)
+--(axis cs:0,1.05475626349687);
+
+\path [draw=black, fill opacity=0] (axis cs:1,0.944781676781557)
+--(axis cs:1,1.05475626349687);
+
+\path [draw=black, fill opacity=0] (axis cs:0.0945,0)
+--(axis cs:0.1055,0);
+
+\path [draw=black, fill opacity=0] (axis cs:0.0945,1)
+--(axis cs:0.1055,1);
+
+\end{axis}
+
+\end{tikzpicture}

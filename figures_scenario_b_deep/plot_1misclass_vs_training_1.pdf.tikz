@@ -1,0 +1,50 @@
+% This file was created by matplotlib2tikz v0.6.18.
+\begin{tikzpicture}
+
+\begin{axis}[
+tick align=outside,
+tick pos=left,
+x grid style={white!69.01960784313725!black},
+xlabel={$r_\text{training}$},
+xmajorgrids,
+xmin=-0.03395, xmax=0.73495,
+xtick={-0.2,0,0.2,0.4,0.6,0.8},
+xticklabels={$-0.2$,$0.0$,$0.2$,$0.4$,$0.6$,$0.8$},
+y grid style={white!69.01960784313725!black},
+ylabel={$\mu$ [\%]},
+ymajorgrids,
+ymin=-1.01195392804699, ymax=26.5511426211454,
+ytick={-10,0,10,20,30},
+yticklabels={$-10$,$0$,$10$,$20$,$30$}
+]
+\addplot [semithick, black, mark=triangle*, mark size=3, mark options={solid}, forget plot]
+table [row sep=\\]{%
+0.001	22.2535792951542 \\
+0.003	25.2982745961821 \\
+0.005	19.0895741556535 \\
+0.007	13.0391886930984 \\
+0.01	13.241097650514 \\
+0.03	1.98237885462555 \\
+0.05	3.39803597650514 \\
+0.07	1.44089574155653 \\
+0.1	0.424467694566813 \\
+0.3	0.812224669603524 \\
+0.4	2.18658223201175 \\
+0.5	1.0439610866373 \\
+0.7	0.2409140969163 \\
+};
+\path [draw=black, fill opacity=0] (axis cs:0,-1.01195392804699)
+--(axis cs:0,26.5511426211454);
+
+\path [draw=black, fill opacity=0] (axis cs:1,-1.01195392804699)
+--(axis cs:1,26.5511426211454);
+
+\path [draw=black, fill opacity=0] (axis cs:-0.03395,0)
+--(axis cs:0.73495,0);
+
+\path [draw=black, fill opacity=0] (axis cs:-0.03395,1)
+--(axis cs:0.73495,1);
+
+\end{axis}
+
+\end{tikzpicture}
