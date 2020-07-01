@@ -23,6 +23,7 @@ from keras.layers import Dense
 from keras.optimizers import Adam
 from keras import backend as K
 import tensorflow as tf
+from tensorflow.compat.v1 import set_random_seed
 
 from sklearn.utils import class_weight
 from sklearn.model_selection import GridSearchCV, train_test_split
@@ -51,8 +52,9 @@ seed = 0
 K_fold = 2
 learning_rate = 0.05
 max_users = 54481
-r_exploitation = 0.8
-p_blockage = 0.4
+q_exploitation = 0.8
+p_blockage_learning = 0.4
+p_blockage_exploitation = 0.2
 
 p_randomness = 0.3 # 0 = all users start in 3.5
 
@@ -86,15 +88,17 @@ Nf = 7 # dB noise fig.
 k_B = 1.38e-23 # Boltzmann
 T = 290 # Kelvins
 
-N_exploit = int(r_exploitation * max_users)
+N_exploit = int(q_exploitation * max_users)
 
 # 1) Read the data
 # Add a few lines to caputre the seed for reproducibility.
 random.seed(seed)
 np.random.seed(seed)
-tf.set_random_seed(seed)
+set_random_seed(seed)
 
-def create_dataset():
+# Changed for review R2
+# on 6/30/2020
+def create_datasets(p_blockage_learning=0.4, p_blockage_exploitation=0.4):
     # Takes the three.csv files and merges them in a way that is useful for the Deep Learning.
     # regenerate the dataset for 3.5 (y,z = 8x4) and 28 (y, z = 64x4)
     df35 = pd.read_csv('dataset/dataset_3.5_GHz.csv')
@@ -112,11 +116,19 @@ def create_dataset():
     # Check that distances are similar
     assert(np.all(df28_b.iloc[:,-3:] == df28_nb.iloc[:,-3:]))
     
-    # Based on blocking probability, create df28.
-    p_b = np.random.binomial(1, p=p_blockage, size=max_users)
+    # Based on blocking probability, create df28: one for learning
+    # and one for exploitation phase
+    p_b = np.random.binomial(1, p=p_blockage_learning, size=max_users)
     df28 = df28_b.copy()
     df28.loc[(p_b==1),:] = df28_b.loc[(p_b == 1),:]
     df28.loc[(p_b==0),:] = df28_nb.loc[(p_b == 0),:]
+    
+    # only overwrite p_b when the values are different.
+    if p_blockage_learning != p_blockage_exploitation:
+        p_b = np.random.binomial(1, p=p_blockage_exploitation, size=max_users)
+    df28_exploitation = df28_b.copy()
+    df28_exploitation.loc[(p_b==1),:] = df28_b.loc[(p_b == 1),:]
+    df28_exploitation.loc[(p_b==0),:] = df28_nb.loc[(p_b == 0),:]
     
     # Map: 0 is ID; 1-YZ+1 are H real; YZ+1-2YZ+1 are Himag; last three are x,y,z 
     # 2) Perform data wrangling and construct the proper channel matrix H
@@ -128,6 +140,10 @@ def create_dataset():
     H28_imag = df28.iloc[:,(mmWave_Y*sub6_Z+1):(2*mmWave_Y*mmWave_Z+1)]
     H28_loc = df28.iloc[:,-3:]    
        
+    H28_exploit_real = df28_exploitation.iloc[:,1:(mmWave_Y*mmWave_Z+1)]
+    H28_exploit_imag = df28_exploitation.iloc[:,(mmWave_Y*sub6_Z+1):(2*mmWave_Y*mmWave_Z+1)]
+    H28_exploit_loc = df28_exploitation.iloc[:,-3:]    
+       
     # Before moving forward, check if the loc at time t is equal
     df35 = df35.rename(columns={df35.columns[-3]:  'lon', 
                          df35.columns[-2]:  'lat', 
@@ -137,34 +153,47 @@ def create_dataset():
                          df28.columns[-2]:  'lat', 
                          df28.columns[-1]:  'height'})
     
+    df28_exploitation = df28_exploitation.rename(columns={df28_exploitation.columns[-3]:  'lon', 
+                     df28_exploitation.columns[-2]:  'lat', 
+                     df28_exploitation.columns[-1]:  'height'})
+    
     assert(np.all(df35.iloc[:,-3:] == df28.iloc[:,-3:]))
+    assert(np.all(df28.iloc[:,-3:] == df28_exploitation.iloc[:,-3:]))
     
     # Reset the column names of the imaginary H
     H35_imag.columns = H35_real.columns
     H28_imag.columns = H28_real.columns
+    H28_exploit_imag.columns = H28_exploit_real.columns
     
     H35 = H35_real + 1j * H35_imag
     H28 = H28_real + 1j * H28_imag
+    H28_exploit = H28_exploit_real + 1j * H28_exploit_imag
     
     del H35_loc, H28_real, H28_imag, H28_loc
+    del H28_exploit_real, H28_exploit_imag, H28_exploit_loc
     
     F_35 = compute_bf_codebook(My=sub6_Y, Mz=sub6_Z, f_c=3.5e9)
     F_28 = compute_bf_codebook(My=mmWave_Y, Mz=mmWave_Z, f_c=28e9)
     
     channel_gain_35 = []
     channel_gain_28 = []
+    channel_gain_28_exploit = []
     
     # Compute the channel gain |h*f|
     # Beamforming is now both vertical and horizontal
     for i in np.arange(max_users):
         h35_i = np.array(H35.iloc[i,:])
         h28_i = np.array(H28.iloc[i,:])
+        h28_exploit_i = np.array(H28_exploit.iloc[i,:])
+        
         channel_gain_35.append(compute_optimal_gain_bf_vector(h35_i, F_35))
         channel_gain_28.append(compute_optimal_gain_bf_vector(h28_i, F_28))
-    
+        channel_gain_28_exploit.append(compute_optimal_gain_bf_vector(h28_exploit_i, F_28))
+        
     # 3) Feature engineering: introduce RSRP mmWave and sub-6 and y
-    channel_gain_28 = np.array(channel_gain_28).astype(float)
     channel_gain_35 = np.array(channel_gain_35).astype(float)
+    channel_gain_28 = np.array(channel_gain_28).astype(float)
+    channel_gain_28_exploit = np.array(channel_gain_28_exploit).astype(float)
     
     # Get rid of unwanted columns in 3.5
     df35 = df35[['0', 'lon', 'lat', 'height']]
@@ -173,9 +202,10 @@ def create_dataset():
     df = df35.copy()    
     df.loc[:,'P_RX_35'] = 10*np.log10(PTX_35 * 1e3 * channel_gain_35)
     df.loc[:,'P_RX_28'] = 10*np.log10(PTX_28 * 1e3 * channel_gain_28)
+    df.loc[:,'P_RX_28_exploit'] = 10*np.log10(PTX_28 * 1e3 * channel_gain_28_exploit)
     
     df = df.iloc[:max_users,:]
-    df = df[['user_id', 'lon', 'lat', 'height', 'P_RX_35', 'P_RX_28']]
+    df = df[['user_id', 'lon', 'lat', 'height', 'P_RX_35', 'P_RX_28', 'P_RX_28_exploit']]
     df.to_csv('dataset.csv', index=False)
     
     return df
@@ -621,16 +651,21 @@ def create_mlp(input_dimension, hidden_dimension, n_hidden):
     return model
 
 def train_classifier(df, r_training=0.8):
+    # This is for the training phase
+    # r_training is basically the training portion of (1 - q_exploitation)
     dataset = df.copy()
     
     training, test = train_test_split(dataset, train_size=r_training, random_state=seed)
+    
+    # TODO: Here is where the change of blockage comes
     
     X_train = training.drop('y', axis=1)
     y_train = training['y']
     X_test = test.drop('y', axis=1)
     y_test = test['y']
     
-    class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
+    # Balance the classes
+    class_weights = class_weight.compute_class_weight('balanced', classes=np.unique(y_train), y=y_train)
     
     X_train_sc = scaler.fit_transform(X_train)
     X_test_sc = scaler.transform(X_test)
@@ -649,10 +684,13 @@ def train_classifier(df, r_training=0.8):
     gpu_available = tf.test.is_gpu_available()
     if (gpu_available == False):
         print('WARNING: No GPU available.  Will continue with CPU.')
-        
-    with tf.device('/gpu:0'):
-        grid_result = grid.fit(X_train_sc, y_train, class_weight=class_weights)
     
+    if (gpu_available):
+        with tf.device('/gpu:0'):
+            grid_result = grid.fit(X_train_sc, y_train, class_weight=class_weights)
+    else:
+        grid_result = grid.fit(X_train_sc, y_train, class_weight=class_weights)
+            
     # This is the best model
     print(grid_result.best_params_)
     clf = grid_result.best_estimator_
@@ -660,9 +698,14 @@ def train_classifier(df, r_training=0.8):
     # clf.model.get_config()
 #    grid_result.best_estimator_.model.save("model_fc.h5") 
         
-    with tf.device('/gpu:0'):
+    if (gpu_available):
+        with tf.device('/gpu:0'):
+            y_pred = clf.predict(X_test_sc)
+            y_score = clf.predict_proba(X_test_sc)
+    else:
         y_pred = clf.predict(X_test_sc)
         y_score = clf.predict_proba(X_test_sc)
+
     try:
         roc_auc = roc_auc_score(y_test, y_score[:,1])
         print('The Training ROC AUC for this classifier is {:.6f}'.format(roc_auc))
@@ -678,10 +721,16 @@ def predict_handover(df, clf, r_training):
     
     X_test_sc = scaler.transform(X_test)
     
-    with tf.device('/gpu:0'):
+    gpu_available = tf.test.is_gpu_available()
+    
+    if gpu_available:
+        with tf.device('/gpu:0'):
+            y_pred = clf.predict(X_test_sc)
+            y_score = clf.predict_proba(X_test_sc)
+    else:
         y_pred = clf.predict(X_test_sc)
         y_score = clf.predict_proba(X_test_sc)
-    
+          
     try:
         # Compute area under ROC curve
         roc_auc = roc_auc_score(y_test, y_score[:,1])
@@ -689,7 +738,7 @@ def predict_handover(df, clf, r_training):
     
         # Save the value
         f = open("figures/output_fc_{}.txt".format(p_randomness), 'a')
-        f.write('r_exploitation {0}, r_training {1}, ROC {2:.6f}\n'.format(r_exploitation, r_training, roc_auc))
+        f.write('q_exploitation {0}, r_training {1}, ROC {2:.6f}\n'.format(q_exploitation, r_training, roc_auc))
         f.close()
 
         y_pred=pd.DataFrame(y_pred)
@@ -737,11 +786,14 @@ def get_coherence_time(df, My, freq):
     print('INFO: sub-6 mean channel coherence time is {} ms'.format(T.mean()))
     return T
 
-#df_ = create_dataset() # only uncomment for the first run, when the channel consideration changes.  Otherwise, no need.
+# This is where the code starts executing.
+# only uncomment for the first run, when the channel consideration changes.  Otherwise, no need.
+#df_ = create_datasets(p_blockage_learning=p_blockage_learning, p_blockage_exploitation=p_blockage_exploitation) 
+
 df_ = pd.read_csv('dataset.csv')
 
 df = df_.iloc[:max_users,:]
-del df_
+#del df_
 
 # Feature engineering: add SNR to the computation:
 noise_floor_35 = k_B * T * delta_f_35 * 1e3
@@ -753,10 +805,16 @@ noise_power_28 = 10 ** (Nf/10.) * noise_floor_28
 # Instantaneous rates (Shannon)
 df['Capacity_35'] = B_35*np.log2(1 + 10**(df['P_RX_35']/10.) / noise_power_35) / 1e6
 df['Capacity_28'] = B_28*np.log2(1 + 10**(df['P_RX_28']/10.) / noise_power_28) / 1e6
+df['Capacity_28_exploit'] = B_28*np.log2(1 + 10**(df['P_RX_28_exploit']/10.) / noise_power_28) / 1e6
 
-df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28']]
+df = df[['lon', 'lat', 'height', 'Capacity_35', 'Capacity_28', 'Capacity_28_exploit']]
 
 user_mask = np.random.binomial(1, p_randomness, size=max_users) # 0 == user is 3.5, 1 == user is mmWave.
+
+# After review R2
+# Changed on 6/30/2020
+exploit_indices = np.random.choice(df.shape[0], N_exploit, replace=False)
+df.loc[exploit_indices, 'Capacity_28'] = df.loc[exploit_indices, 'Capacity_28_exploit']
 
 # Source and Target are instantaneous rates.
 df.loc[user_mask==0, 'Source'] = df.loc[user_mask==0, 'Capacity_35']
@@ -786,14 +844,11 @@ coeff_mmWave_ho = (coherence_time_mmWave - beam_training_penalty_mmWave - gap_du
 
 df.to_csv('figures/dataset_rates_{}.csv'.format(p_randomness))
 
-##############################################################################
 df['Source_is_3.5'] = (df['Source'] == df['Capacity_35']) + 0
 df['Source_is_28'] = (df['Source'] == df['Capacity_28']) + 0
 
-exploit_indices = np.random.choice(df.shape[0], N_exploit, replace=False)
-
 sub_6_capacities = df.loc[exploit_indices, 'Capacity_35'].copy()
-mmWave_capacities = df.loc[exploit_indices, 'Capacity_28'].copy()
+mmWave_capacities = df.loc[exploit_indices, 'Capacity_28_exploit'].copy()
 
 # Change the order of columns to put 
 column_order = ['lon', 'lat', 'height', 'Source', 'Target', 'Source_is_3.5', 'Source_is_28']
@@ -910,16 +965,21 @@ df_proposed.loc[df_proposed['HO_requested'] == 0, 'y'] = 0
 if (p_randomness == 0 or p_randomness == 1):
     df_proposed = df_proposed.drop(['Source_is_3.5'], axis=1) # these two values will make the column of a single value.
 
+# Make sure we are doing the right thing
+assert(int(q_exploitation * max_users) == len(exploit_indices))
+
 # Use this for the exploitation
-train_valid, benchmark_data_proposed = train_test_split(df_proposed, test_size=r_exploitation, random_state=seed)
+#train_valid, benchmark_data_proposed = train_test_split(df_proposed, test_size=q_exploitation, random_state=seed)
 
-# The training and validation data get the infinity threshold (always request).
-train_valid['HO_requested'] = 1
-
+# After R2
+# Change on 6/30/2020
+# The split should be done based on the exploit index.
 train_indices = pd.Int64Index(np.arange(df.shape[0])).difference(exploit_indices)
 train_valid = df_proposed.iloc[train_indices, :]
-
 benchmark_data_proposed = df_proposed.iloc[exploit_indices, :]
+
+# The training and validation data get the infinity threshold (always request).
+train_valid.loc[:, 'HO_requested'] = 1
 
 roc_graphs = pd.DataFrame()
 misclass_graphs = pd.DataFrame()
@@ -1016,7 +1076,8 @@ for policy in ['proposed', 'legacy', 'blind']:
     f.write('Policy {0} -- number of handovers granted in exploitation phase: {1:.0f}\n'.format(policy, d_['y'].sum()))
 f.close()
     
-data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_proposed['HO_requested'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28']], axis=1, ignore_index=True)
+# After R2
+data = pd.concat([benchmark_data_optimal['Capacity_Optimal'], benchmark_data_proposed['Capacity_Proposed'], benchmark_data_proposed['HO_requested'], benchmark_data_legacy['Capacity_Legacy'], benchmark_data_blind['Capacity_Blind'], sub_6_capacities['Capacity_35'], mmWave_capacities['Capacity_28_exploit']], axis=1, ignore_index=True)
 data.columns = ['Optimal', 'Proposed', 'HO_requested', 'Legacy', 'Blind', 'Sub-6 only', 'mmWave only']
 data.to_csv('figures/dataset_post_{}.csv'.format(p_randomness), index=False)
 
