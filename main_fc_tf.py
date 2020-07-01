@@ -788,10 +788,7 @@ def get_coherence_time(df, My, freq):
 
 # This is where the code starts executing.
 # only uncomment for the first run, when the channel consideration changes.  Otherwise, no need.
-#df_ = create_datasets(p_blockage_learning=p_blockage_learning, p_blockage_exploitation=p_blockage_exploitation) 
-
-df_ = pd.read_csv('dataset.csv')
-
+df_ = create_datasets(p_blockage_learning=p_blockage_learning, p_blockage_exploitation=p_blockage_exploitation) 
 df = df_.iloc[:max_users,:]
 #del df_
 
